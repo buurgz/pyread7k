@@ -7,8 +7,8 @@ from test import bf_filepath
 
 import psutil
 import pytest
-
-from pyread7k import PingDataset, PingType
+from numpy.testing import assert_almost_equal
+from pyread7k import ConcatDataset, Dataset, PingDataset, PingType
 
 # %%
 
@@ -17,7 +17,7 @@ def get_current_memory():
     """ Prints current memory of active process """
     pid = os.getpid()
     own_process = psutil.Process(pid)
-    return own_process.memory_info()[0] / (1024 ** 2)
+    return own_process.memory_info()[0] / (1024**2)
 
 
 @pytest.fixture
@@ -34,6 +34,7 @@ def test_sonar_settings_time(dataset):
     for p in dataset:
         assert isinstance(p.sonar_settings.frame.time, datetime.datetime)
 
+
 def test_can_loop_multiple_times(dataset: PingDataset):
     loop1count = 0
     for p in dataset:
@@ -46,6 +47,7 @@ def test_can_loop_multiple_times(dataset: PingDataset):
         loop2count += 1
 
     assert loop1count == loop2count
+
 
 def test_dataset_memory_use(dataset: PingDataset):
     init_memory = get_current_memory()
@@ -70,3 +72,35 @@ def test_dataset_memory_use(dataset: PingDataset):
     # Final check is whether the current memory is reduced
     # by minimizing the ping datastructure
     assert cur_memory > get_current_memory()
+
+
+def test_new_dataset_class_read():
+    ds = Dataset(bf_filepath)
+    assert isinstance(ds, ConcatDataset)
+
+
+def test_concatdataset_class_iterate():
+    # Since dataset is a subclass of concat dataset we should be
+    # able to iterate over the dataset and iterating multiple
+    # times should also be possible
+    ds = Dataset(bf_filepath, include=PingType.BEAMFORMED)
+    a_old = None
+    a_new = None
+    for p in ds:
+        a_old = a_new
+        a_new = p.beamformed.amplitudes
+
+    for p in ds:
+        a_old = a_new
+        a_new = p.beamformed.amplitudes
+
+
+def test_concatdataset_iteration_items():
+    # Since dataset is a subclass of concat dataset we should be
+    # able to iterate over the dataset and iterating multiple
+    # times should also be possible
+    ds = Dataset(bf_filepath, include=PingType.BEAMFORMED)
+    for i, p in enumerate(ds):
+        assert p == ds[i]
+        assert_almost_equal(p.beamformed.amplitudes,
+                            ds[i].beamformed.amplitudes)
