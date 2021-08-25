@@ -9,7 +9,9 @@ Expected order of records for a ping:
 7058, 7068, 7070
 
 """
+import glob
 import math
+import os
 from datetime import timedelta
 from enum import Enum
 from functools import cached_property as cached_property_functools
@@ -402,7 +404,7 @@ class PingDataset:
         return len(self.pings)
 
     def index_of(self, ping_number: int):
-        return self.__ping_numbers.index(ping_number)
+        return self.ping_numbers.index(ping_number)
 
     def get_by_number(
         self, ping_number: int, default: Optional[int] = None
@@ -441,13 +443,23 @@ class ConcatDataset:
 
     def get_by_number(
         self, ping_number: int, default: Optional[int] = None
-    ) -> Union[Ping, None]:
+    ) -> Optional[Ping]:
         if not isinstance(ping_number, int):
             raise TypeError("Ping number must be an integer")
         for ds in self.datasets:
-            if (ping_index := ds.get_by_number(ping_number, default)) is not None:
-                return ds[ping_index]
+            if (ping := ds.get_by_number(ping_number, default)) is not None:
+                return ping
         return default
+
+    def __iter__(self):
+        for i in range(len(self)):
+            self.__index = i
+            yield self[i]
+            self[i].minimize_memory()
+
+    def minimize_memory(self):
+        for ds in self.datasets:
+            ds.minimize_memory()
 
     def __getitem__(self, index: Union[slice, int]) -> Union[Ping, List[Ping]]:
         if not isinstance(index, slice):
@@ -463,3 +475,35 @@ class ConcatDataset:
             return self.datasets[dataset_index][sample_index]
         else:
             return [self[i] for i in range(*index.indices(len(self)))]
+
+
+### NEW DATASET WITH OPTION FOR READING MULTIPLE DATASETS
+class Dataset(ConcatDataset):
+    """Indexable dataset returning pings from a 7k file or set of 7k files.
+
+    Provides random access into pings in a file with minimal overhead.
+    """
+
+    def __init__(self, pathname: str, include: PingType = PingType.ANY):
+        """"""
+        if isinstance(pathname, str):
+            # Check if it is a file, or directory
+            if os.path.isfile(pathname):
+                filenames = [pathname]
+            elif os.path.isdir(pathname):
+                filenames = glob.glob(os.path.join(pathname, "*.s7k"))
+            else:
+                # The pathname is a relative path, which means we can
+                # get the matching files using glob
+                filenames = glob.glob(pathname)
+
+            if len(filenames) == 0:
+                raise ValueError("Provided pathname did not match any files")
+        else:
+            raise TypeError("Pathname must be a string")
+
+        datasets = []
+        for f in filenames:
+            datasets.append(PingDataset(f, include=include))
+
+        ConcatDataset.__init__(self, datasets)
