@@ -274,6 +274,10 @@ class Ping:
         return record
 
     @cached_property
+    def ping_number(self) -> int:
+        return self.sonar_settings.ping_number
+
+    @cached_property
     def position_set(self) -> List[records.Position]:
         """ Returns all 1003 records timestamped within this ping. """
         return self._manager.get_records_during_ping(
@@ -427,9 +431,20 @@ class ConcatDataset:
     """
 
     def __init__(self, datasets):
-        self.cum_lengths = np.cumsum([len(d) for d in datasets])
-        self.datasets = datasets
-        self.__ping_numbers = [pn for ds in datasets for pn in ds.ping_numbers]
+        # We should start by ordering the datasets by time
+        self.datasets = sorted(datasets, key=lambda x: x[0].sonar_settings.frame.time)
+        self.__ping_numbers = []
+        self.cum_lengths = []
+        ds_count = 0
+        for i, ds in enumerate(self.datasets):
+            ds_pings = []
+            for p in ds.pings:
+                if p.ping_number not in self.__ping_numbers:
+                    ds_count += 1
+                    ds_pings.append(p)
+                    self.__ping_numbers.append(p.ping_number)
+            ds.pings = ds_pings
+            self.cum_lengths.append(ds_count)
 
     def __len__(self) -> int:
         return self.cum_lengths[-1]
