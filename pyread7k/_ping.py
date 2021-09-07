@@ -248,10 +248,8 @@ class Ping:
         reader: S7KReader,
     ):
         self._reader = reader
-        self._offset, sonar_settings = offset_record
-        self._ping_number = sonar_settings.ping_number
-        self._sample_rate = sonar_settings.sample_rate
-        self._ping_start = sonar_settings.frame.time
+        self._offset, self.sonar_settings = offset_record
+
         if next_offset_record is not None:
             self._next_offset, next_sonar_settings = next_offset_record
             self._next_ping_start = next_sonar_settings.frame.time
@@ -264,7 +262,7 @@ class Ping:
 
     @property
     def ping_number(self) -> int:
-        return self._ping_number
+        return self.sonar_settings.ping_number
 
     @property
     def configuration(self) -> records.Configuration:
@@ -336,7 +334,7 @@ class Ping:
         self, sample: int
     ) -> Tuple[records.RollPitchHeave, records.Heading]:
         """ Find the most appropriate motion data for a sample based on time """
-        time = self._ping_start + timedelta(seconds=sample / self._sample_rate)
+        time = self.sonar_settings.frame.time + timedelta(seconds=sample / self.sonar_settings.sample_rate)
         rph_index = min(
             bisect.bisect_left([m.frame.time for m in self.roll_pitch_heave_set], time),
             len(self.roll_pitch_heave_set) - 1,
@@ -367,7 +365,7 @@ class Ping:
 
     def _read_records(self, record_type: int) -> List[records.BaseRecord]:
         return self._reader.read_records_during_ping(
-            record_type, self._ping_start, self._next_ping_start, self._offset
+            record_type, self.sonar_settings.frame.time, self._next_ping_start, self._offset
         )
 
 
