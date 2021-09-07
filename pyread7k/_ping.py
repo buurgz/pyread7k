@@ -479,7 +479,6 @@ class ConcatDataset:
             return [self[i] for i in range(*index.indices(len(self)))]
 
 
-### NEW DATASET WITH OPTION FOR READING MULTIPLE DATASETS
 class Dataset(ConcatDataset):
     """Indexable dataset returning pings from a 7k file or set of 7k files.
 
