@@ -9,9 +9,9 @@ Expected order of records for a ping:
 7058, 7068, 7070
 
 """
+import bisect
 import glob
 import os
-import bisect
 import sys
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
@@ -334,7 +334,9 @@ class Ping:
         self, sample: int
     ) -> Tuple[records.RollPitchHeave, records.Heading]:
         """ Find the most appropriate motion data for a sample based on time """
-        time = self.sonar_settings.frame.time + timedelta(seconds=sample / self.sonar_settings.sample_rate)
+        time = self.sonar_settings.frame.time + timedelta(
+            seconds=sample / self.sonar_settings.sample_rate
+        )
         rph_index = min(
             bisect.bisect_left([m.frame.time for m in self.roll_pitch_heave_set], time),
             len(self.roll_pitch_heave_set) - 1,
@@ -365,7 +367,10 @@ class Ping:
 
     def _read_records(self, record_type: int) -> List[records.BaseRecord]:
         return self._reader.read_records_during_ping(
-            record_type, self.sonar_settings.frame.time, self._next_ping_start, self._offset
+            record_type,
+            self.sonar_settings.frame.time,
+            self._next_ping_start,
+            self._offset,
         )
 
 
