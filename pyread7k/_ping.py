@@ -10,10 +10,10 @@ Expected order of records for a ping:
 
 """
 import bisect
-import warnings
 import glob
 import os
 import sys
+import warnings
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
@@ -376,10 +376,14 @@ class Ping:
 
 
 class FileDataset:
-    """
-    Indexable dataset returning Pings from a 7k file.
+    """Indexable dataset returning Pings from a 7k file.
 
     Provides random access into pings in a file with minimal overhead.
+
+    Args:
+        filename (str): Path to the s7k file
+        include (PingType): Type of ping data we want to access
+
     """
 
     def __init__(self, filename: str, include: PingType = PingType.ANY):
@@ -419,8 +423,15 @@ class FileDataset:
 
 
 class ConcatDataset:
-    """
-    Dataset concatenation object
+    """Concatenate a list of s7k dataset.
+
+    The provided datasets are not assumed to be ordered and it will not order them.
+    The ConcatDataset object provides seamless access to all pings in the datasets
+    without the need for knowing each individual datasets size.
+
+    Args:
+        datasets (List): List of datasets to concatenate
+
     """
 
     def __init__(self, datasets):
@@ -476,22 +487,41 @@ class ConcatDataset:
 
 class PingDataset(FileDataset):
     def __init__(self, *args, **kwargs):
-        warnings.warn("PingDataset has been renamed to FileDataset and will be removed in the next release", DeprecationWarning)
+        warnings.warn(
+            "PingDataset has been renamed to FileDataset and will be removed in the next release",
+            DeprecationWarning,
+        )
         super().__init__(*args, **kwargs)
 
 
 class FolderDataset(ConcatDataset):
-    """Indexable dataset returning pings from a 7k file or set of 7k files.
+    """Read a folder of s7k files and create indexable s7k dataset.
 
-    Provides random access into pings in a file with minimal overhead.
+    The FolderDataset is a subclass of the ConcatDataset. It assumes
+    that the folderpath provided contains s7k files that are all part
+    of the same voyage. It will therefore sort the files found in the
+    folder and the indexing of the returned dataset will therefore be
+    ordered by the first ping times.
+
+    If provides the same ping access functionality as the FileDataset.
+
+    NOTE: It is non-recursive, meaning it won't read from subdirectories.
+
+    Args:
+        folderpath (str): Path to directory of s7k files
+        include (PingType): Types of pings we are interested in accessing
+
     """
 
     def __init__(self, folderpath: str, include: PingType = PingType.ANY):
-        """"""
         if isinstance(folderpath, str):
             # Check if it is a file, or directory
             if not os.path.isdir(folderpath):
-                raise(FileNotFoundError(f"Provided folder '{folderpath}' could not be located"))
+                raise (
+                    FileNotFoundError(
+                        f"Provided folder '{folderpath}' could not be located"
+                    )
+                )
             filenames = glob.glob(os.path.join(folderpath, "*.s7k"))
 
             if len(filenames) == 0:
@@ -508,7 +538,12 @@ class FolderDataset(ConcatDataset):
         self.__ping_numbers = []
         self.cum_lengths = []
         ds_count = 0
-        for i, ds in enumerate(self.datasets):
+        # Loop over all the pings in the datasets and exclude duplicates.
+        # This is necessary because of the way data is stored accross files,
+        # meaning that subsequent files often include a couple of pings
+        # from the end of the previous s7k file. This loop excludes all
+        # duplicates.
+        for ds in self.datasets:
             ds_pings = []
             for p in ds.pings:
                 if p.ping_number not in self.__ping_numbers:
