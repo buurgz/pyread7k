@@ -10,6 +10,7 @@ Expected order of records for a ping:
 
 """
 import bisect
+import warnings
 import glob
 import os
 import sys
@@ -374,7 +375,7 @@ class Ping:
         )
 
 
-class PingDataset:
+class FileDataset:
     """
     Indexable dataset returning Pings from a 7k file.
 
@@ -423,20 +424,9 @@ class ConcatDataset:
     """
 
     def __init__(self, datasets):
-        # We should start by ordering the datasets by time
-        self.datasets = sorted(datasets, key=lambda x: x[0].sonar_settings.frame.time)
-        self.__ping_numbers = []
-        self.cum_lengths = []
-        ds_count = 0
-        for i, ds in enumerate(self.datasets):
-            ds_pings = []
-            for p in ds.pings:
-                if p.ping_number not in self.__ping_numbers:
-                    ds_count += 1
-                    ds_pings.append(p)
-                    self.__ping_numbers.append(p.ping_number)
-            ds.pings = ds_pings
-            self.cum_lengths.append(ds_count)
+        self.cum_lengths = np.cumsum([len(d) for d in datasets])
+        self.datasets = datasets
+        self.__ping_numbers = [pn for ds in datasets for pn in ds.ping_numbers]
 
     def __len__(self) -> int:
         return self.cum_lengths[-1]
@@ -484,24 +474,25 @@ class ConcatDataset:
             return [self[i] for i in range(*index.indices(len(self)))]
 
 
-class Dataset(ConcatDataset):
+class PingDataset(FileDataset):
+    def __init__(self, *args, **kwargs):
+        warnings.warn("PingDataset has been renamed to FileDataset and will be removed in the next release", DeprecationWarning)
+        super().__init__(*args, **kwargs)
+
+
+class FolderDataset(ConcatDataset):
     """Indexable dataset returning pings from a 7k file or set of 7k files.
 
     Provides random access into pings in a file with minimal overhead.
     """
 
-    def __init__(self, pathname: str, include: PingType = PingType.ANY):
+    def __init__(self, folderpath: str, include: PingType = PingType.ANY):
         """"""
-        if isinstance(pathname, str):
+        if isinstance(folderpath, str):
             # Check if it is a file, or directory
-            if os.path.isfile(pathname):
-                filenames = [pathname]
-            elif os.path.isdir(pathname):
-                filenames = glob.glob(os.path.join(pathname, "*.s7k"))
-            else:
-                # The pathname is a relative path, which means we can
-                # get the matching files using glob
-                filenames = glob.glob(pathname)
+            if not os.path.isdir(folderpath):
+                raise(FileNotFoundError(f"Provided folder '{folderpath}' could not be located"))
+            filenames = glob.glob(os.path.join(folderpath, "*.s7k"))
 
             if len(filenames) == 0:
                 raise ValueError("Provided pathname did not match any files")
@@ -510,6 +501,19 @@ class Dataset(ConcatDataset):
 
         datasets = []
         for f in filenames:
-            datasets.append(PingDataset(f, include=include))
+            datasets.append(FileDataset(f, include=include))
 
-        ConcatDataset.__init__(self, datasets)
+        # We should start by ordering the datasets by time
+        self.datasets = sorted(datasets, key=lambda x: x[0].sonar_settings.frame.time)
+        self.__ping_numbers = []
+        self.cum_lengths = []
+        ds_count = 0
+        for i, ds in enumerate(self.datasets):
+            ds_pings = []
+            for p in ds.pings:
+                if p.ping_number not in self.__ping_numbers:
+                    ds_count += 1
+                    ds_pings.append(p)
+                    self.__ping_numbers.append(p.ping_number)
+            ds.pings = ds_pings
+            self.cum_lengths.append(ds_count)

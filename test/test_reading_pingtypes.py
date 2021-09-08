@@ -1,14 +1,12 @@
 # %%
-from test import bf_filepath, iq_filepath
+from pyread7k import FileDataset, PingType
 
-import pyread7k
+from .conftest import bf_filepath, iq_filepath
 
 
 def test_read_beamformed():
-    assert (
-        len(pyread7k.PingDataset(bf_filepath, include=pyread7k.PingType.BEAMFORMED)) > 0
-    )
+    assert (len(FileDataset(bf_filepath, include=PingType.BEAMFORMED)) > 0)
 
 
 def test_read_iq():
-    assert len(pyread7k.PingDataset(iq_filepath, include=pyread7k.PingType.IQ)) > 0
+    assert len(FileDataset(iq_filepath, include=PingType.IQ)) > 0
