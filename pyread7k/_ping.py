@@ -10,7 +10,10 @@ Expected order of records for a ping:
 
 """
 import bisect
+import glob
+import os
 import sys
+import warnings
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
@@ -268,6 +271,10 @@ class Ping:
         return self._reader.configuration
 
     @cached_property
+    def ping_number(self) -> int:
+        return self.sonar_settings.ping_number
+
+    @cached_property
     def position_set(self) -> List[records.Position]:
         """ Returns all 1003 records timestamped within this ping. """
         return cast(List[records.Position], self._read_records(1003))
@@ -328,7 +335,9 @@ class Ping:
         self, sample: int
     ) -> Tuple[records.RollPitchHeave, records.Heading]:
         """ Find the most appropriate motion data for a sample based on time """
-        time = self.sonar_settings.frame.time + timedelta(seconds=sample / self.sonar_settings.sample_rate)
+        time = self.sonar_settings.frame.time + timedelta(
+            seconds=sample / self.sonar_settings.sample_rate
+        )
         rph_index = min(
             bisect.bisect_left([m.frame.time for m in self.roll_pitch_heave_set], time),
             len(self.roll_pitch_heave_set) - 1,
@@ -359,15 +368,22 @@ class Ping:
 
     def _read_records(self, record_type: int) -> List[records.BaseRecord]:
         return self._reader.read_records_during_ping(
-            record_type, self.sonar_settings.frame.time, self._next_ping_start, self._offset
+            record_type,
+            self.sonar_settings.frame.time,
+            self._next_ping_start,
+            self._offset,
         )
 
 
-class PingDataset:
-    """
-    Indexable dataset returning Pings from a 7k file.
+class FileDataset:
+    """Indexable dataset returning Pings from a 7k file.
 
     Provides random access into pings in a file with minimal overhead.
+
+    Args:
+        filename (str): Path to the s7k file
+        include (PingType): Type of ping data we want to access
+
     """
 
     def __init__(self, filename: str, include: PingType = PingType.ANY):
@@ -407,8 +423,15 @@ class PingDataset:
 
 
 class ConcatDataset:
-    """
-    Dataset concatenation object
+    """Concatenate a list of s7k dataset.
+
+    The provided datasets are not assumed to be ordered and it will not order them.
+    The ConcatDataset object provides seamless access to all pings in the datasets
+    without the need for knowing each individual datasets size.
+
+    Args:
+        datasets (List): List of datasets to concatenate
+
     """
 
     def __init__(self, datasets):
@@ -428,13 +451,23 @@ class ConcatDataset:
 
     def get_by_number(
         self, ping_number: int, default: Optional[int] = None
-    ) -> Union[Ping, None]:
+    ) -> Optional[Ping]:
         if not isinstance(ping_number, int):
             raise TypeError("Ping number must be an integer")
         for ds in self.datasets:
-            if (ping_index := ds.get_by_number(ping_number, default)) is not None:
-                return ds[ping_index]
+            if (ping := ds.get_by_number(ping_number, default)) is not None:
+                return ping
         return default
+
+    def __iter__(self):
+        for i in range(len(self)):
+            self.__index = i
+            yield self[i]
+            self[i].minimize_memory()
+
+    def minimize_memory(self):
+        for ds in self.datasets:
+            ds.minimize_memory()
 
     def __getitem__(self, index: Union[slice, int]) -> Union[Ping, List[Ping]]:
         if not isinstance(index, slice):
@@ -450,3 +483,72 @@ class ConcatDataset:
             return self.datasets[dataset_index][sample_index]
         else:
             return [self[i] for i in range(*index.indices(len(self)))]
+
+
+class PingDataset(FileDataset):
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "PingDataset has been renamed to FileDataset and will be removed in the next release",
+            DeprecationWarning,
+        )
+        super().__init__(*args, **kwargs)
+
+
+class FolderDataset(ConcatDataset):
+    """Read a folder of s7k files and create indexable s7k dataset.
+
+    The FolderDataset is a subclass of the ConcatDataset. It assumes
+    that the folderpath provided contains s7k files that are all part
+    of the same voyage. It will therefore sort the files found in the
+    folder and the indexing of the returned dataset will therefore be
+    ordered by the first ping times.
+
+    If provides the same ping access functionality as the FileDataset.
+
+    NOTE: It is non-recursive, meaning it won't read from subdirectories.
+
+    Args:
+        folderpath (str): Path to directory of s7k files
+        include (PingType): Types of pings we are interested in accessing
+
+    """
+
+    def __init__(self, folderpath: str, include: PingType = PingType.ANY):
+        if isinstance(folderpath, str):
+            # Check if it is a file, or directory
+            if not os.path.isdir(folderpath):
+                raise (
+                    FileNotFoundError(
+                        f"Provided folder '{folderpath}' could not be located"
+                    )
+                )
+            filenames = glob.glob(os.path.join(folderpath, "*.s7k"))
+
+            if len(filenames) == 0:
+                raise ValueError("Provided pathname did not match any files")
+        else:
+            raise TypeError("Pathname must be a string")
+
+        datasets = []
+        for f in filenames:
+            datasets.append(FileDataset(f, include=include))
+
+        # We should start by ordering the datasets by time
+        self.datasets = sorted(datasets, key=lambda x: x[0].sonar_settings.frame.time)
+        self.__ping_numbers = []
+        self.cum_lengths = []
+        ds_count = 0
+        # Loop over all the pings in the datasets and exclude duplicates.
+        # This is necessary because of the way data is stored accross files,
+        # meaning that subsequent files often include a couple of pings
+        # from the end of the previous s7k file. This loop excludes all
+        # duplicates.
+        for ds in self.datasets:
+            ds_pings = []
+            for p in ds.pings:
+                if p.ping_number not in self.__ping_numbers:
+                    ds_count += 1
+                    ds_pings.append(p)
+                    self.__ping_numbers.append(p.ping_number)
+            ds.pings = ds_pings
+            self.cum_lengths.append(ds_count)
