@@ -395,7 +395,7 @@ class FileDataset:
 
     @property
     def ping_numbers(self) -> List[int]:
-            return self._ping_numbers
+        return self._ping_numbers
 
     def minimize_memory(self) -> None:
         for p in self.pings:
