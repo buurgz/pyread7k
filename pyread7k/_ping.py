@@ -391,11 +391,11 @@ class FileDataset:
         if include argument is not ANY, pings will be filtered.
         """
         self.pings = list(S7KFileReader(filename).iter_pings(include))
-        self.__ping_numbers = [p.ping_number for p in self.pings]
+        self._ping_numbers = [p.ping_number for p in self.pings]
 
     @property
     def ping_numbers(self) -> List[int]:
-        return self.__ping_numbers
+        return self._ping_numbers
 
     def minimize_memory(self) -> None:
         for p in self.pings:
@@ -405,7 +405,7 @@ class FileDataset:
         return len(self.pings)
 
     def index_of(self, ping_number: int) -> int:
-        return self.__ping_numbers.index(ping_number)
+        return self._ping_numbers.index(ping_number)
 
     def get_by_number(
         self, ping_number: int, default: Optional[Ping] = None
@@ -437,14 +437,14 @@ class ConcatDataset:
     def __init__(self, datasets):
         self.cum_lengths = np.cumsum([len(d) for d in datasets])
         self.datasets = datasets
-        self.__ping_numbers = [pn for ds in datasets for pn in ds.ping_numbers]
+        self._ping_numbers = [pn for ds in datasets for pn in ds.ping_numbers]
 
     def __len__(self) -> int:
         return self.cum_lengths[-1]
 
     @property
     def ping_numbers(self) -> List[int]:
-        return self.__ping_numbers
+        return self._ping_numbers
 
     def index_of(self, ping_number: int) -> int:
         return self.ping_numbers.index(ping_number)
@@ -535,7 +535,7 @@ class FolderDataset(ConcatDataset):
 
         # We should start by ordering the datasets by time
         self.datasets = sorted(datasets, key=lambda x: x[0].sonar_settings.frame.time)
-        self.__ping_numbers = []
+        self._ping_numbers = []
         self.cum_lengths = []
         ds_count = 0
         # Loop over all the pings in the datasets and exclude duplicates.
@@ -546,9 +546,15 @@ class FolderDataset(ConcatDataset):
         for ds in self.datasets:
             ds_pings = []
             for p in ds.pings:
-                if p.ping_number not in self.__ping_numbers:
+                if p.ping_number not in self._ping_numbers:
                     ds_count += 1
                     ds_pings.append(p)
-                    self.__ping_numbers.append(p.ping_number)
+                    self._ping_numbers.append(p.ping_number)
+                elif ds_pings and p.ping_number == ds_pings[0].ping_number:
+                    # Old software sometimes wrote a duplicated 7000 record out of order
+                    # at the beginning of a new file. We remove it here, to keep pings in order
+                    del ds_pings[0]
+                    ds_pings.append(p)
+
             ds.pings = ds_pings
             self.cum_lengths.append(ds_count)
