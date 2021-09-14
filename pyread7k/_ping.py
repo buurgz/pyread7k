@@ -35,7 +35,7 @@ import geopy
 import numpy as np
 
 from . import _datarecord, records
-from ._utils import cached_property, window
+from ._utils import cached_property, window, find_ping_index
 
 
 class PingType(Enum):
@@ -550,5 +550,11 @@ class FolderDataset(ConcatDataset):
                     ds_count += 1
                     ds_pings.append(p)
                     self.__ping_numbers.append(p.ping_number)
+                elif ds_pings and p.ping_number == ds_pings[0].ping_number:
+                    # Old software sometimes wrote a duplicated 7000 record out of order
+                    # at the beginning of a new file. We remove it here, to keep pings in order
+                    del ds_pings[0]
+                    ds_pings.append(p)
+
             ds.pings = ds_pings
             self.cum_lengths.append(ds_count)
