@@ -582,7 +582,7 @@ class _DataRecord1013(DataRecord):
 
 
 class _DataRecord1018(DataRecord):
-    """ Depth """
+    """ Velocity """
 
     _record_type_id = 1018
     _block_rth = DataBlock((
