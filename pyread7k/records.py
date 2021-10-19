@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 from xml.etree import ElementTree as ET
 
@@ -100,6 +101,17 @@ class Position(BaseRecord):
 
 
 @dataclass
+class Depth(BaseRecord):
+    """ Record 1008 Water depth """
+    record_type : int = field(default=1008, init=False)
+
+    depth_descriptor : int
+    correction_flag : int
+    depth : float
+
+
+
+@dataclass
 class RollPitchHeave(BaseRecord):
     """
     Record 1012
@@ -120,6 +132,17 @@ class Heading(BaseRecord):
     record_type: int = field(default=1013, init=False)
 
     heading: float
+
+
+@dataclass
+class Velocity(BaseRecord):
+    """ Record 1018 Velocity over the ground. All values in meters per second. """
+
+    record_type: int = field(default=1018, init=False)
+
+    velocity_x : float
+    velocity_y : float
+    velocity_z : float
 
 
 @dataclass
@@ -241,6 +264,34 @@ class Beamformed(BaseRecord):
 
     amplitudes: np.ndarray
     phases: np.ndarray
+
+class SnippetControlFlag(Enum):
+    """ Flag for 7028 Snippet data """
+    AUTOMATIC_SNIPPET_WINDOW_USED = 0
+    QUALITY_FILTER_ENABLED = 1
+    MINIMUM_WINDOW_SIZE_REQUIRED = 2
+    MAXIMIUM_WINDOW_SIZE_REQUIRED = 3
+
+@dataclass
+class SnippetData(BaseRecord):
+    """
+    Record 7028
+    Contains seabed detections for bathymetry data
+    """
+    record_type: int = field(default=7028, init=False)
+
+    sonar_id : int
+    ping_number : int
+    multi_ping_sequence : int
+    detection_count : int
+    error_flag : int
+    control_flags : SnippetControlFlag
+    flags : int
+
+    bottom_detections : np.ndarray
+
+    # Intensity snippet from beamformed data for each detection
+    intensities : list[np.ndarray]
 
 
 @dataclass
