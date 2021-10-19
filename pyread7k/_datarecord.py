@@ -358,6 +358,55 @@ class _DataRecord7018(DataRecord):
         )
 
 
+class _DataRecord7028(DataRecord):
+    """ Snippet data """
+
+    _record_type_id = 7028
+    _block_rth = DataBlock(
+        (
+            elemD_("sonar_id", elemT.u64),
+            elemD_("ping_number", elemT.u32),
+            elemD_("multi_ping_sequence", elemT.u16),
+            elemD_("detection_count", elemT.u16),
+            elemD_("error_flag", elemT.u8),
+            elemD_("control_flags", elemT.u8),
+            elemD_("flags", elemT.u32),
+            elemD_(None, elemT.u32, 6),
+        )
+    )
+    _block_rd = DataBlock(
+        (
+            elemD_("beam_number", elemT.u16),
+            elemD_("snippet_start", elemT.u32),
+            elemD_("detection_sample", elemT.u32),
+            elemD_("snippet_end", elemT.u32),
+        )
+    )
+
+    def _read(
+        self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
+    ):
+        rth = self._block_rth.read(source)
+        rth["control_flags"] = records.SnippetControlFlag(rth["control_flags"])
+
+        rd = self._block_rd.read_dense(source, rth["detection_count"])
+
+        # Pre-read all intensities into linear array for speed
+        snippet_type = elemT.u32 if rth["flags"] & 1 == 1 else elemT.u16
+        snippet_block = DataBlock((elemD_("intensity", snippet_type), ))
+        snippet_lengths = rd["snippet_end"] - rd["snippet_start"]
+        all_intensities = snippet_block.read_dense(source, int(snippet_lengths.sum()))
+
+        # Partition intensities into snippets
+        offset = 0
+        intensities = []
+        for snippet_length in snippet_lengths:
+            intensities.append(all_intensities[offset:offset + snippet_length])
+            offset += snippet_length
+
+        return records.SnippetData(**rth, bottom_detections=rd, intensities=intensities, frame=drf)
+
+
 class _DataRecord7038(DataRecord):
     """ IQ data """
 
@@ -499,6 +548,24 @@ class _DataRecord1012(DataRecord):
         return records.RollPitchHeave(**rth, frame=drf)
 
 
+class _DataRecord1008(DataRecord):
+    """ Depth """
+
+    _record_type_id = 1008
+    _block_rth = DataBlock((
+        elemD_("depth_descriptor", elemT.u8),
+        elemD_("correction_flag", elemT.u8),
+        elemD_(None, elemT.u16),  # Reserved
+        elemD_("depth", elemT.f32),
+    ))
+
+    def _read(
+        self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
+    ):
+        rth = self._block_rth.read(source)
+        return records.Depth(**rth, frame=drf)
+
+
 class _DataRecord1013(DataRecord):
     """Heading"""
 
@@ -512,6 +579,23 @@ class _DataRecord1013(DataRecord):
         rd = None  # no rd
         od = None  # no optional data
         return records.Heading(**rth, frame=drf)
+
+
+class _DataRecord1018(DataRecord):
+    """ Velocity """
+
+    _record_type_id = 1018
+    _block_rth = DataBlock((
+        elemD_("velocity_x", elemT.f32),
+        elemD_("velocity_y", elemT.f32),
+        elemD_("velocity_z", elemT.f32),
+    ))
+
+    def _read(
+        self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
+    ):
+        rth = self._block_rth.read(source)
+        return records.Velocity(**rth, frame=drf)
 
 
 def record(type_id: int) -> DataRecord:
