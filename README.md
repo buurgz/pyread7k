@@ -17,6 +17,13 @@ pip install pyread7k
 pip install git+https://github.com/Teledyne-Marine/pyread7k.git
 ```
 
+## Using pyread7k as a Submodule
+On Linux and MacOS pyread7k can be used as a submodule as usual. But problems can occur when using the package as a submodule on Windows, which at this time (2022-01-10) are caused by issues with Windows and nested poetry packages. A quickfix for this is to: 
+
+1. add the package as a submodule for your package
+2. cd into the submodule and build the package using `poetry build`
+3. install the wheel (in poetry and pdm you can just point the dependency of pyread7k to the wheel)
+
 
 # Getting started
 Working with the pyread7k library is quite intuitive, and given that you have a s7k file, you can load a dataset using the PingDataset class:
