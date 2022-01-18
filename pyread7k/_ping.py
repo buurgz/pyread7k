@@ -573,3 +573,11 @@ class FolderDataset(ConcatDataset):
 
             ds.pings = ds_pings
             self.cum_lengths.append(ds_count)
+
+        # Fix for issue #24
+        for i in range(1, len(self.datasets)):
+            # Get timestamp of first ping in subsequent dataset
+            new_time = self.datasets[i][0].sonar_settings.frame.time
+
+            # Update last ping of previous dataset
+            self.datasets[i - 1][-1]._next_ping_start = new_time
