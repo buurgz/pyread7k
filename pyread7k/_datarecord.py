@@ -393,7 +393,7 @@ class _DataRecord7028(DataRecord):
 
         # Pre-read all intensities into linear array for speed
         snippet_type = elemT.u32 if rth["flags"] & 1 == 1 else elemT.u16
-        snippet_block = DataBlock((elemD_("intensity", snippet_type), ))
+        snippet_block = DataBlock((elemD_("intensity", snippet_type),))
         snippet_lengths = rd["snippet_end"] - rd["snippet_start"]
         all_intensities = snippet_block.read_dense(source, int(snippet_lengths.sum()))
 
@@ -401,10 +401,12 @@ class _DataRecord7028(DataRecord):
         offset = 0
         intensities = []
         for snippet_length in snippet_lengths:
-            intensities.append(all_intensities[offset:offset + snippet_length])
+            intensities.append(all_intensities[offset : offset + snippet_length])
             offset += snippet_length
 
-        return records.SnippetData(**rth, bottom_detections=rd, intensities=intensities, frame=drf)
+        return records.SnippetData(
+            **rth, bottom_detections=rd, intensities=intensities, frame=drf
+        )
 
 
 class _DataRecord7038(DataRecord):
@@ -552,12 +554,14 @@ class _DataRecord1008(DataRecord):
     """ Depth """
 
     _record_type_id = 1008
-    _block_rth = DataBlock((
-        elemD_("depth_descriptor", elemT.u8),
-        elemD_("correction_flag", elemT.u8),
-        elemD_(None, elemT.u16),  # Reserved
-        elemD_("depth", elemT.f32),
-    ))
+    _block_rth = DataBlock(
+        (
+            elemD_("depth_descriptor", elemT.u8),
+            elemD_("correction_flag", elemT.u8),
+            elemD_(None, elemT.u16),  # Reserved
+            elemD_("depth", elemT.f32),
+        )
+    )
 
     def _read(
         self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
@@ -585,11 +589,13 @@ class _DataRecord1018(DataRecord):
     """ Velocity """
 
     _record_type_id = 1018
-    _block_rth = DataBlock((
-        elemD_("velocity_x", elemT.f32),
-        elemD_("velocity_y", elemT.f32),
-        elemD_("velocity_z", elemT.f32),
-    ))
+    _block_rth = DataBlock(
+        (
+            elemD_("velocity_x", elemT.f32),
+            elemD_("velocity_y", elemT.f32),
+            elemD_("velocity_z", elemT.f32),
+        )
+    )
 
     def _read(
         self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
