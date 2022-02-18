@@ -10,6 +10,7 @@ Expected order of records for a ping:
 
 """
 import bisect
+import io
 import glob
 import os
 import sys
@@ -18,6 +19,7 @@ from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
 from itertools import chain
+import logging
 from typing import (
     Any,
     BinaryIO,
@@ -34,8 +36,10 @@ from typing import (
 import geopy
 import numpy as np
 
-from . import _datarecord, records
-from ._utils import cached_property, window
+from . import _datarecord, records, DRFBlock
+from ._utils import cached_property, window, build_file_catalog
+
+logger = logging.getLogger(__name__)
 
 
 class PingType(Enum):
@@ -46,6 +50,31 @@ class PingType(Enum):
     ANY = 3
 
 
+class CatalogIssueHandling(Enum):
+    """How to handle file catalog issues.
+    It has 4 modes, which handle catalog issues differently.
+
+    The first is to silently handle missing catalogs. This makes sure that
+    parsing of S7k files using pyread7ks various file and folder datasets is
+    smooth, even when the file catalog is missing, as it can construct the file
+    catalog with an initial linear read.
+
+    The second is to silently handle corrupt file catalogs. This will work both
+    if the file catalog is said to be missing or not.
+
+    The third is similar to the second, but will disable warnings.
+
+    The fourth is to raise if the file catalog is missing or corrupt
+
+
+    """
+
+    HANDLE_MISSING = 1
+    HANDLE_CORRUPT = 2
+    HANDLE_BUT_WARN = 3
+    RAISE = 4
+
+
 class S7KReader(metaclass=ABCMeta):
     """
     Base abstract class of S7K readers
@@ -53,18 +82,49 @@ class S7KReader(metaclass=ABCMeta):
     *Note*: The current S7KReader API is considered unstable and may change in the future.
     """
 
+    _catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.RAISE
+    _file_catalog_missing: bool
+
     @cached_property
     def file_header(self) -> records.FileHeader:
         """Return the file header record for this reader"""
-        return cast(records.FileHeader, self._read_record(7200, 0))
+        fileheader = cast(records.FileHeader, self._read_record(7200, 0))
+        if not fileheader.catalog_offset > 0:
+            if self._catalog_issue_handling == CatalogIssueHandling.RAISE:
+                raise _datarecord.MissingFileCatalog(
+                    "No file catalog found! Use HANDLE_MISSING, HANDLE_CORRUPT, or HANDLE_BUT_WARN if you still want to read it."
+                )
+            if self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN:
+                logger.warn("File catalog is missing, but will be constructed.")
+                self._file_catalog_missing = True
+        return fileheader
 
     @cached_property
     def file_catalog(self) -> records.FileCatalog:
         """Return the file catalog record for this reader"""
-        return cast(
-            records.FileCatalog,
-            self._read_record(7300, self.file_header.catalog_offset),
-        )
+        if self._file_catalog_missing:
+            # Assumes that the file catalog is missing, and will rebuild it.
+            # This means that if there is a file catalog, no information from that will be used.
+            filecatalog = self._build_file_catalog()
+        else:
+            try:
+                filecatalog = cast(
+                    records.FileCatalog,
+                    self._read_record(7300, self.file_header.catalog_offset),
+                )
+            except _datarecord.CorruptFileCatalog as exc:
+                if self._catalog_issue_handling == CatalogIssueHandling.HANDLE_MISSING:
+                    raise _datarecord.CorruptFileCatalog(
+                        "File catalog is corrupt and issue handling only set to handle missing. Use HANDLE_CORRUPT, or HANDLE_BUT_WARN to be able to parse all erroneous files."
+                    )
+                elif self._catalog_issue_handling == CatalogIssueHandling.RAISE:
+                    raise exc
+                elif (
+                    self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN
+                ):
+                    logger.warn("File catalog was corrupt but a new one was generated.")
+                filecatalog = self._build_file_catalog()
+            return filecatalog
 
     @cached_property
     def configuration(self) -> records.Configuration:
@@ -209,17 +269,59 @@ class S7KReader(metaclass=ABCMeta):
     def _get_stream_for_read(self, offset: int) -> BinaryIO:
         """Return a byte stream for reading a record at the given offset"""
 
+    @abstractmethod
+    def _build_file_catalog(self) -> records.FileCatalog:
+        """ Build the file catalog. """
+
+
+def S7KStreamer(filename: str, records_to_read: Optional[List[int]] = []):
+    """Linear parsing of S7k files."""
+    if not isinstance(filename, str):
+        raise TypeError("Filename is not a string")
+    elif not os.path.exists(filename):
+        raise FileNotFoundError(f"Filename '{filename}' could not be found!")
+    with open(filename, "rb", buffering=0) as fhandle:
+        offset = 0
+        while (drf := DRFBlock().read(fhandle)) != {}:
+            fhandle.seek(offset)
+            if (not (drf.record_type_id in records_to_read)) and len(records_to_read):
+                offset += drf.size
+                fhandle.seek(offset)
+            else:
+                try:
+                    record = _datarecord.record(drf.record_type_id).read(fhandle, drf)
+                except _datarecord.UnsupportedRecordError as exc:
+                    logger.info(exc)
+                    record = _datarecord.UnsupportedRecord(drf.record_type_id, drf)
+                except Exception as exc:
+                    # TODO: Do we want to be able to read corrupt files? If so we can just warn about the corrupt file and continue
+                    fhandle.close()
+                    raise exc
+                offset += drf.size
+                fhandle.seek(offset)
+                yield record
+
 
 class S7KFileReader(S7KReader):
     """Reader class for s7k files"""
 
-    def __init__(self, filename: str):
+    def __init__(
+        self,
+        filename: str,
+        catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.HANDLE_BUT_WARN,
+    ):
         self._filename = filename
-        self._fhandle = open(self._filename, "rb", buffering=0)
+        self._fhandle = open(self._filename, "rb", 0)
+        self._catalog_issue_handling = catalog_issue_handling
+        self._file_catalog_missing = False
 
     def _get_stream_for_read(self, offset: int) -> BinaryIO:
         self._fhandle.seek(offset)
         return self._fhandle
+
+    def _build_file_catalog(self) -> records.FileCatalog:
+        self._fhandle.seek(0)
+        return build_file_catalog(self._fhandle)
 
     def __getstate__(self) -> Dict[str, Any]:
         """ Remove unpicklable file handle from dict before pickling. """
@@ -246,7 +348,7 @@ class Ping:
         self,
         offset_record: Tuple[int, records.SonarSettings],
         next_offset_record: Optional[Tuple[int, records.SonarSettings]],
-        reader: S7KReader,
+        reader: S7KFileReader,
     ):
         self._reader = reader
         self._offset, self.sonar_settings = offset_record
@@ -263,16 +365,13 @@ class Ping:
 
     @property
     def ping_number(self) -> int:
+        """Return ping number."""
         return self.sonar_settings.ping_number
 
     @property
     def configuration(self) -> records.Configuration:
         """Return the 7001 record, which is shared for all pings in a file"""
         return self._reader.configuration
-
-    @cached_property
-    def ping_number(self) -> int:
-        return self.sonar_settings.ping_number
 
     @cached_property
     def position_set(self) -> List[records.Position]:
@@ -401,11 +500,18 @@ class FileDataset:
 
     """
 
-    def __init__(self, filename: str, include: PingType = PingType.ANY):
+    def __init__(
+        self,
+        filename: str,
+        include: PingType = PingType.ANY,
+        catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.HANDLE_BUT_WARN,
+    ):
         """
         if include argument is not ANY, pings will be filtered.
         """
-        self.pings = list(S7KFileReader(filename).iter_pings(include))
+        self.pings = list(
+            S7KFileReader(filename, catalog_issue_handling).iter_pings(include)
+        )
         self._ping_numbers = [p.ping_number for p in self.pings]
 
     @property

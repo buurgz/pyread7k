@@ -93,7 +93,10 @@ class DataBlock(metaclass=abc.ABCMeta):
 
         dict_read = defaultdict(list)
         for _ in range(count):
-            unpacked = self._struct.unpack(source.read(self.size))
+            buf = source.read(self.size)
+            if not buf:
+                break
+            unpacked = self._struct.unpack(buf)
             elements_zip = zip(self._names, self._sizes)
             offset = 0
             for name, (_, n_elems) in elements_zip:
@@ -228,5 +231,8 @@ class DRFBlock(DataBlock):
     def read(self, source: io.RawIOBase):
         init_data = super().read(source)
         # convert time from bytes to datetime
-        init_data["time"] = parse_7k_timestamp(b"".join(init_data["time"]))
-        return records.DataRecordFrame(**init_data)
+        if len(init_data):
+            init_data["time"] = parse_7k_timestamp(b"".join(init_data["time"]))
+            return records.DataRecordFrame(**init_data)
+        else:
+            return init_data

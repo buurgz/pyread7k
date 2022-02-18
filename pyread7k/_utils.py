@@ -7,7 +7,8 @@ from typing import Iterable, Iterator, Tuple, TypeVar
 
 from . import records
 from ._datarecord import record as _record
-from .records import FileCatalog, FileHeader
+from ._datablock import DRFBlock
+from .records import DataRecordFrame, FileCatalog, FileHeader
 
 __all__ = [
     "read_file_header",
@@ -54,6 +55,44 @@ def read_file_catalog(source: io.RawIOBase, file_header: FileHeader) -> FileCata
     source.seek(file_header.catalog_offset)
     file_catalog: FileCatalog = _record(7300).read(source)
     return file_catalog
+
+
+def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
+    """ Build the file catalog using linear reading of s7k file. """
+    file_catalog_data = {
+        "frame": None,
+        "size": -1,
+        "version": -1,
+        "number_of_records": 0,
+        "sizes": [],
+        "offsets": [],
+        "record_types": [],
+        "device_ids": [],
+        "system_enumerators": [],
+        "times": [],
+        "record_counts": [],
+    }
+    source.seek(0)
+    number_of_records = 0
+    offset = 0
+    while True:
+        drf = DRFBlock().read(source)
+        if not isinstance(drf, DataRecordFrame):
+            break
+        if drf.record_type_id != 7300:
+            file_catalog_data["offsets"].append(offset)
+            file_catalog_data["sizes"].append(drf.size)
+            file_catalog_data["record_types"].append(drf.record_type_id)
+            file_catalog_data["device_ids"].append(drf.device_id)
+            file_catalog_data["system_enumerators"].append(drf.system_enumerator)
+            file_catalog_data["times"].append(drf.time)
+            file_catalog_data["record_counts"].append(drf.time)
+            number_of_records += 1
+        offset += drf.size
+        source.seek(offset)
+    source.seek(0)
+    file_catalog_data["number_of_records"] = number_of_records
+    return FileCatalog(**file_catalog_data)
 
 
 def get_record_offsets(type_id: int, file_catalog: FileCatalog) -> tuple:
