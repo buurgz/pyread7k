@@ -284,6 +284,7 @@ def S7KStreamer(filename: str, records_to_read: Optional[List[int]] = []):
         raise TypeError("Filename is not a string")
 
     path = Path(filename)
+    print(path)
 
     if not path.exists():
         raise FileNotFoundError(f"Filename '{filename}' could not be found!")
