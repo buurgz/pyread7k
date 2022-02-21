@@ -10,16 +10,14 @@ Expected order of records for a ping:
 
 """
 import bisect
-import io
-import glob
-import os
+import logging
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
 from itertools import chain
-import logging
+from pathlib import Path
 from typing import (
     Any,
     BinaryIO,
@@ -36,8 +34,8 @@ from typing import (
 import geopy
 import numpy as np
 
-from . import _datarecord, records, DRFBlock
-from ._utils import cached_property, window, build_file_catalog
+from . import DRFBlock, _datarecord, records
+from ._utils import build_file_catalog, cached_property, window
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +92,10 @@ class S7KReader(metaclass=ABCMeta):
                 raise _datarecord.MissingFileCatalog(
                     "No file catalog found! Use HANDLE_MISSING, HANDLE_CORRUPT, or HANDLE_BUT_WARN if you still want to read it."
                 )
-            if self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN:
-                logger.warn("File catalog is missing, but will be constructed.")
+            elif self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN:
+                logger.warning(
+                    "File catalog is missing, but will be constructed."
+                )
                 self._file_catalog_missing = True
         return fileheader
 
@@ -122,7 +122,9 @@ class S7KReader(metaclass=ABCMeta):
                 elif (
                     self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN
                 ):
-                    logger.warn("File catalog was corrupt but a new one was generated.")
+                    logger.warning(
+                        "File catalog was corrupt but a new one was generated."
+                    )
                 filecatalog = self._build_file_catalog()
             return filecatalog
 
@@ -276,11 +278,16 @@ class S7KReader(metaclass=ABCMeta):
 
 def S7KStreamer(filename: str, records_to_read: Optional[List[int]] = []):
     """Linear parsing of S7k files."""
+
+    # Ensure that the provided filepath is a string
     if not isinstance(filename, str):
         raise TypeError("Filename is not a string")
-    elif not os.path.exists(filename):
+
+    path = Path(filename)
+
+    if not path.exists():
         raise FileNotFoundError(f"Filename '{filename}' could not be found!")
-    with open(filename, "rb", buffering=0) as fhandle:
+    with path.open(mode="rb", buffering=0) as fhandle:
         offset = 0
         while (drf := DRFBlock().read(fhandle)) != {}:
             fhandle.seek(offset)
@@ -308,7 +315,7 @@ class S7KFileReader(S7KReader):
     def __init__(
         self,
         filename: str,
-        catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.HANDLE_BUT_WARN,
+        catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.RAISE,
     ):
         self._filename = filename
         self._fhandle = open(self._filename, "rb", 0)
@@ -504,7 +511,7 @@ class FileDataset:
         self,
         filename: str,
         include: PingType = PingType.ANY,
-        catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.HANDLE_BUT_WARN,
+        catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.RAISE,
     ):
         """
         if include argument is not ANY, pings will be filtered.
@@ -634,16 +641,22 @@ class FolderDataset(ConcatDataset):
 
     """
 
-    def __init__(self, folderpath: str, include: PingType = PingType.ANY):
+    def __init__(
+        self,
+        folderpath: str,
+        include: PingType = PingType.ANY,
+        catalog_issue_handling=CatalogIssueHandling.RAISE,
+    ):
+        path = Path(folderpath)
         if isinstance(folderpath, str):
             # Check if it is a file, or directory
-            if not os.path.isdir(folderpath):
+            if not path.is_dir():
                 raise (
                     FileNotFoundError(
                         f"Provided folder '{folderpath}' could not be located"
                     )
                 )
-            filenames = glob.glob(os.path.join(folderpath, "*.s7k"))
+            filenames = list(path.glob("*.s7k"))
 
             if len(filenames) == 0:
                 raise ValueError("Provided pathname did not match any files")
@@ -652,7 +665,11 @@ class FolderDataset(ConcatDataset):
 
         datasets = []
         for f in filenames:
-            datasets.append(FileDataset(f, include=include))
+            datasets.append(
+                FileDataset(
+                    f, include=include, catalog_issue_handling=catalog_issue_handling
+                )
+            )
 
         # We should start by ordering the datasets by time
         self.datasets = sorted(datasets, key=lambda x: x[0].sonar_settings.frame.time)

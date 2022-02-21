@@ -9,7 +9,7 @@ import pytest
 from pyread7k import (ConcatDataset, FileDataset, FolderDataset, Ping,
                       PingDataset, PingType)
 
-from .context import bf_filepath, iq_filepath, root_dir
+from .context import corrupt_filepath, bf_filepath, iq_filepath, root_dir
 
 
 @pytest.fixture

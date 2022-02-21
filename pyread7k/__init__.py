@@ -1,6 +1,7 @@
 from ._datablock import DRFBlock
 from ._datarecord import record
 from ._ping import (
+    CatalogIssueHandling,
     ConcatDataset,
     FileDataset,
     FolderDataset,
@@ -9,5 +10,6 @@ from ._ping import (
     PingType,
     S7KFileReader,
     S7KReader,
+    S7KStreamer,
 )
 from ._utils import *

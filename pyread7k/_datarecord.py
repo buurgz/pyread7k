@@ -3,21 +3,21 @@ Low-level classes for reading various 7k record types.
 """
 # pylint: disable=invalid-name unnecessary-comprehension
 import abc
-from inspect import Attribute
 import io
+from inspect import Attribute
 from typing import Any, Dict, Optional
 from xml.etree import ElementTree as ET
 
 import numpy as np
 
 from . import records
-from ._exceptions import (
-    MissingFileCatalog,
-    CorruptFileCatalog,
-    UnsupportedRecordError,
-    CorruptRecordDataError,
-)
 from ._datablock import DataBlock, DRFBlock, elemD_, elemT, parse_7k_timestamp
+from ._exceptions import (
+    CorruptFileCatalog,
+    CorruptRecordDataError,
+    MissingFileCatalog,
+    UnsupportedRecordError,
+)
 
 
 def _bytes_to_str(dict, keys):

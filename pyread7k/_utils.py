@@ -6,8 +6,8 @@ import itertools as it
 from typing import Iterable, Iterator, Tuple, TypeVar
 
 from . import records
-from ._datarecord import record as _record
 from ._datablock import DRFBlock
+from ._datarecord import record as _record
 from .records import DataRecordFrame, FileCatalog, FileHeader
 
 __all__ = [

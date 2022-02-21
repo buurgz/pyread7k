@@ -127,3 +127,4 @@ def test_folderdataset_input(folderpath, expected, raises):
     with raises:
         result = FolderDataset(folderpath, include=PingType.BEAMFORMED)
         assert isinstance(result, expected)
+
