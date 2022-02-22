@@ -362,7 +362,7 @@ class Ping:
 
     @property
     def ping_number(self) -> int:
-        """Return ping number."""
+        """Return ping number from the sonar settings record."""
         return self.sonar_settings.ping_number
 
     @property
