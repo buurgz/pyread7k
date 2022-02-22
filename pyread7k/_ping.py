@@ -29,6 +29,7 @@ from typing import (
     Tuple,
     Union,
     cast,
+    Generator
 )
 
 import geopy
@@ -60,10 +61,9 @@ class CatalogIssueHandling(Enum):
     The second is to silently handle corrupt file catalogs. This will work both
     if the file catalog is said to be missing or not.
 
-    The third is similar to the second, but will disable warnings.
+    The third is similar to the second, but will enable warnings.
 
     The fourth is to raise if the file catalog is missing or corrupt
-
 
     """
 
@@ -276,8 +276,21 @@ class S7KReader(metaclass=ABCMeta):
         """ Build the file catalog. """
 
 
-def S7KStreamer(filename: str, records_to_read: Optional[List[int]] = []):
-    """Linear parsing of S7k files."""
+def S7KRecordReader(filename: str, records_to_read: Optional[List[int]] = []) -> Generator:
+    """Linearly parse s7k files.
+    The S7KRecordReader is a generator which linearly goes through the s7k 
+    file provided in the input argument and returns one record at a time.
+    For records that haven't been implemented yet, it will return
+    an UnsupportedRecord, which will just include the data record frame.
+
+    Args:
+        filename (str): Name of the file to read
+        records_to_read (:obj: `List[int]`, optional): List of records to parse
+
+    Returns:
+        A datarecord or unsupported record
+    
+    """
 
     # Ensure that the provided filepath is a string
     if not isinstance(filename, str):
