@@ -10,6 +10,6 @@ from ._ping import (
     PingType,
     S7KFileReader,
     S7KReader,
-    S7KRecordReader,
 )
+from ._recordreader import S7KRecordReader
 from ._utils import *

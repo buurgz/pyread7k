@@ -8,8 +8,9 @@ from collections.abc import Iterable
 import psutil
 import pytest
 from numpy.testing import assert_almost_equal
-from pyread7k import (ConcatDataset, FileDataset, FolderDataset, PingDataset, S7KRecordReader,
-                      PingType)
+from pyread7k import (ConcatDataset, FileDataset, FolderDataset, PingDataset,
+                      PingType, S7KRecordReader)
+                    
 
 from .conftest import bf_filepath, does_not_raise, filedataset, root_dir
 
