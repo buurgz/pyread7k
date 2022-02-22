@@ -59,7 +59,13 @@ def read_file_catalog(source: io.RawIOBase, file_header: FileHeader) -> FileCata
 
 
 def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
-    """ Build the file catalog using linear reading of s7k file. """
+    """ Build the file catalog using linear reading of s7k file. 
+
+    This utility function is used to construct a file catalog by reading through
+    the records in the s7k file. It currently correctly handles all but:
+    record_counts.
+    
+    """
     file_catalog_data = {
         "frame": None,
         "size": -1,
@@ -88,7 +94,8 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
             file_catalog_data["device_ids"].append(drf.device_id)
             file_catalog_data["system_enumerators"].append(drf.system_enumerator)
             file_catalog_data["times"].append(drf.time)
-            file_catalog_data["record_counts"].append(drf.time)
+            fragmented = int(drf.size > 60000)
+            file_catalog_data["record_counts"].append(fragmented)
             number_of_records += 1
             frame = drf
         offset += drf.size
