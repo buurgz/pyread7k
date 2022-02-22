@@ -103,7 +103,7 @@ class S7KReader(metaclass=ABCMeta):
                 )
             elif self.catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN:
                 logger.warning(
-                    "File catalog is missing, but will be constructed."
+                    "File catalog is missing, the whole file will be scanned to build one. Add a file catalog to your s7k file to prevent this."
                 )
                 self.file_catalog_missing = True
         return fileheader
