@@ -14,8 +14,8 @@ from . import records
 from ._datablock import DataBlock, DRFBlock, elemD_, elemT, parse_7k_timestamp
 from ._exceptions import (
     CorruptFileCatalog,
+    CorruptFileHeader,
     CorruptRecordDataError,
-    MissingFileCatalog,
     UnsupportedRecordError,
 )
 
@@ -635,17 +635,6 @@ class _DataRecord1018(DataRecord):
     ):
         rth = self._block_rth.read(source)
         return records.Velocity(**rth, frame=drf)
-
-
-class UnsupportedRecord:
-    def __init__(self, record_type_id: int, drf: records.DataRecordFrame):
-        self._record_type_id = record_type_id
-        self.frame = drf
-
-    @property
-    def record_type_id(self):
-        """ Return record type. """
-        return self._record_type_id
 
 
 def record(type_id: int) -> DataRecord:

@@ -52,6 +52,9 @@ class BaseRecord:
     record_type: int  # Should be overridden by subclasses
 
 
+class UnsupportedRecord(BaseRecord):
+    """Placeholder for unsupported records"""
+
 @dataclass
 class Position(BaseRecord):
     """

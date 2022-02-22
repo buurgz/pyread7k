@@ -300,7 +300,7 @@ def S7KStreamer(filename: str, records_to_read: Optional[List[int]] = []):
                     record = _datarecord.record(drf.record_type_id).read(fhandle, drf)
                 except _datarecord.UnsupportedRecordError as exc:
                     logger.info(exc)
-                    record = _datarecord.UnsupportedRecord(drf.record_type_id, drf)
+                    record = records.UnsupportedRecord(drf.record_type_id, drf)
                 except Exception as exc:
                     # TODO: Do we want to be able to read corrupt files? If so we can just warn about the corrupt file and continue
                     fhandle.close()
