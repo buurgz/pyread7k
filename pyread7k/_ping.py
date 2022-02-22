@@ -13,7 +13,7 @@ import bisect
 import logging
 import sys
 import warnings
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from datetime import datetime, timedelta
 from enum import Enum
 from itertools import chain
@@ -80,29 +80,38 @@ class S7KReader(metaclass=ABCMeta):
     *Note*: The current S7KReader API is considered unstable and may change in the future.
     """
 
-    _catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.RAISE
-    _file_catalog_missing: bool
+    @abstractproperty
+    def catalog_issue_handling(self) -> CatalogIssueHandling:
+        """Return the catalog issue handling property."""
+
+    @abstractproperty
+    def file_catalog_missing(self) -> bool:
+        """Returns whether the file catalog is missing or not."""
+
+    @file_catalog_missing.setter
+    def file_catalog_missing(self, value: bool):
+        """Update the value for the file catalog."""
 
     @cached_property
     def file_header(self) -> records.FileHeader:
         """Return the file header record for this reader"""
         fileheader = cast(records.FileHeader, self._read_record(7200, 0))
         if not fileheader.catalog_offset > 0:
-            if self._catalog_issue_handling == CatalogIssueHandling.RAISE:
+            if self.catalog_issue_handling == CatalogIssueHandling.RAISE:
                 raise _datarecord.MissingFileCatalog(
                     "No file catalog found! Use HANDLE_MISSING, HANDLE_CORRUPT, or HANDLE_BUT_WARN if you still want to read it."
                 )
-            elif self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN:
+            elif self.catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN:
                 logger.warning(
                     "File catalog is missing, but will be constructed."
                 )
-                self._file_catalog_missing = True
+                self.file_catalog_missing = True
         return fileheader
 
     @cached_property
     def file_catalog(self) -> records.FileCatalog:
         """Return the file catalog record for this reader"""
-        if self._file_catalog_missing:
+        if self.file_catalog_missing:
             # Assumes that the file catalog is missing, and will rebuild it.
             # This means that if there is a file catalog, no information from that will be used.
             filecatalog = self._build_file_catalog()
@@ -357,6 +366,21 @@ class S7KFileReader(S7KReader):
 
     def __del__(self) -> None:
         self._fhandle.close()
+
+    @property
+    def catalog_issue_handling(self) -> CatalogIssueHandling:
+        """Return the catalog issue handling property."""
+        return self._file_catalog_missing
+
+    @property
+    def file_catalog_missing(self) -> bool:
+        """Returns whether the file catalog is missing or not."""
+        return self._file_catalog_missing
+
+    @file_catalog_missing.setter
+    def file_catalog_missing(self, value: bool):
+        """Update the value for the file catalog."""
+        self._file_catalog_missing = value
 
 
 class Ping:
