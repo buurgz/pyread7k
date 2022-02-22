@@ -45,7 +45,15 @@ class DataRecord(metaclass=abc.ABCMeta):
     _record_type_id = None
 
     def read(self, source: io.RawIOBase, drf: Optional[records.DataRecordFrame] = None):
-        """Base record reader"""
+        """Base record reader.
+        
+        Args:
+            source (io.RawIOBase): The bytes object to read from
+            drf (:obj: `records.DataRecordFrame`, optional): An optional input to minimize reads
+        Returns:
+            A data record
+        
+        """
         start_offset = source.tell()
         if drf is None:
             drf = self._block_drf.read(source)
