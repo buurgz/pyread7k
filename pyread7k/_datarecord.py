@@ -16,6 +16,7 @@ from ._exceptions import (
     CorruptFileCatalog,
     CorruptFileHeader,
     CorruptRecordDataError,
+    MissingFileCatalog,
     UnsupportedRecordError,
 )
 
@@ -245,10 +246,16 @@ class _DataRecord7200(DataRecord):
                 "notes",
             ],
         )
-        rd = self._block_rd_device_type.read(source, rth["number_of_devices"])
-        source.seek(start_offset)
-        source.seek(drf.optional_data_offset, io.SEEK_CUR)
-        od = self._block_od.read(source)
+        try:
+            rd = self._block_rd_device_type.read(source, rth["number_of_devices"])
+            source.seek(start_offset)
+            source.seek(drf.optional_data_offset, io.SEEK_CUR)
+            od = self._block_od.read(source)
+        except Exception as exc:
+            raise MissingFileCatalog(
+                "The optional data of the file header (record 7200) is not present."
+                " This is hypothetically possible given the DFD, but has not been handled yet."
+            ) from exc
 
         # return rth, rd, od
         return records.FileHeader(**rth, **rd, **od, frame=drf)
