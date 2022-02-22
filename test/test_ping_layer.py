@@ -130,17 +130,17 @@ def test_folderdataset_input(folderpath, expected, raises):
         assert isinstance(result, expected)
 
 
-def test_stream_reader_linear_read():
+def test_records_reader_linear_read():
     stream_reader = S7KRecordReader(bf_filepath)
     records = [record for record in stream_reader]
     assert len(records) > 0
 
-def test_stream_reader_bad_path_exception():
+def test_records_reader_bad_path_exception():
     with pytest.raises(FileNotFoundError):
         [r for r in S7KRecordReader("not a real path")]
 
 
-def test_stream_reader_non_existing_record_returns_empty_recordlist():
+def test_records_reader_non_existing_record_returns_empty_recordlist():
     stream_reader = S7KRecordReader(bf_filepath, records_to_read=[1202391283098123])
     records = [record for record in stream_reader]
     assert len(records) == 0

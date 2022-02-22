@@ -6,6 +6,7 @@ import io
 import struct
 from collections import defaultdict, namedtuple
 from datetime import datetime, timedelta
+from typing import Optional
 
 import numpy as np
 
@@ -228,11 +229,11 @@ class DRFBlock(DataBlock):
         )
         super().__init__(elements)
 
-    def read(self, source: io.RawIOBase):
+    def read(self, source: io.RawIOBase) -> Optional[records.DataRecordFrame]:
         init_data = super().read(source)
         # convert time from bytes to datetime
         if len(init_data):
             init_data["time"] = parse_7k_timestamp(b"".join(init_data["time"]))
             return records.DataRecordFrame(**init_data)
         else:
-            return init_data
+            return None

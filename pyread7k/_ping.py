@@ -116,6 +116,10 @@ class S7KReader(metaclass=ABCMeta):
             filecatalog = self._build_file_catalog()
         else:
             try:
+                record7300 = self._read_record(7300, self.file_header.catalog_offset)
+                if record7300 is None:
+                    raise _datarecord.CorruptFileCatalog
+
                 filecatalog = cast(
                     records.FileCatalog,
                     self._read_record(7300, self.file_header.catalog_offset),

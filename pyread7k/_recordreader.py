@@ -33,7 +33,11 @@ def S7KRecordReader(filename: str, records_to_read: List[int] = []) -> Generator
         raise FileNotFoundError(f"Filename '{filename}' could not be found!")
     with path.open(mode="rb", buffering=0) as fhandle:
         offset = 0
-        while (drf := DRFBlock().read(fhandle)) != {}:
+        while True:
+            drf = DRFBlock().read(fhandle)
+            if drf is None:
+                break
+
             fhandle.seek(offset)
             if (not (drf.record_type_id in records_to_read)) and len(records_to_read):
                 offset += drf.size

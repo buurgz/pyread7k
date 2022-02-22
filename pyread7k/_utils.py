@@ -77,7 +77,7 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
     offset = 0
     while True:
         drf = DRFBlock().read(source)
-        if not isinstance(drf, DataRecordFrame):
+        if drf is None:
             break
         if drf.record_type_id != 7300:
             file_catalog_data["offsets"].append(offset)
