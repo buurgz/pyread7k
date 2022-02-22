@@ -285,7 +285,7 @@ class S7KReader(metaclass=ABCMeta):
         """ Build the file catalog. """
 
 
-def S7KRecordReader(filename: str, records_to_read: Optional[List[int]] = []) -> Generator:
+def S7KRecordReader(filename: str, records_to_read: List[int] = []) -> Generator:
     """Linearly parse s7k files.
     The S7KRecordReader is a generator which linearly goes through the s7k 
     file provided in the input argument and returns one record at a time.
@@ -294,7 +294,8 @@ def S7KRecordReader(filename: str, records_to_read: Optional[List[int]] = []) ->
 
     Args:
         filename (str): Name of the file to read
-        records_to_read (:obj: `List[int]`, optional): List of records to parse
+        records_to_read (List[int]): List of records to parse. 
+            Default is the empty list representing all.
 
     Returns:
         A datarecord or unsupported record
