@@ -124,7 +124,7 @@ class S7KReader(metaclass=ABCMeta):
             except _datarecord.CorruptFileCatalog as exc:
                 if self._catalog_issue_handling == CatalogIssueHandling.HANDLE_MISSING:
                     raise _datarecord.CorruptFileCatalog(
-                        "File catalog is corrupt and issue handling only set to handle missing. Use HANDLE_CORRUPT, or HANDLE_BUT_WARN to be able to parse all erroneous files."
+                        "File catalog is corrupt and issue handling only set to handle missing. Use HANDLE_CORRUPT, or HANDLE_BUT_WARN to attempt to reconstruct the file catalog."
                     )
                 elif self._catalog_issue_handling == CatalogIssueHandling.RAISE:
                     raise exc
