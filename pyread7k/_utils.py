@@ -1,4 +1,5 @@
 import collections
+from copy import copy
 import csv
 import functools
 import io
@@ -75,6 +76,7 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
     source.seek(0)
     number_of_records = 0
     offset = 0
+    frame = None
     while True:
         drf = DRFBlock().read(source)
         if drf is None:
@@ -88,10 +90,26 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
             file_catalog_data["times"].append(drf.time)
             file_catalog_data["record_counts"].append(drf.time)
             number_of_records += 1
+            frame = drf
         offset += drf.size
         source.seek(offset)
     source.seek(0)
     file_catalog_data["number_of_records"] = number_of_records
+    # Create a dummy frame for the file catalog
+    dummy_frame = frame
+    # Calculate the size of the record frames data
+    dummy_frame.size = (8 + 4 + 2 + 2 + 2 + 10 + 4 + 8 * 2) * number_of_records
+    # Add the size of the drf and the size of a single data record
+    dummy_frame.size += 68 + 14
+    dummy_frame.version = 1
+    dummy_frame.record_type_id = 7300
+    dummy_frame.system_enumerator = 0
+    dummy_frame.flags = 0
+    dummy_frame.checksum = None 
+    dummy_frame.device_id = 7000 # System event id
+    file_catalog_data["frame"] = dummy_frame
+    file_catalog_data["size"] = 14
+    file_catalog_data["version"] = 1
     return FileCatalog(**file_catalog_data)
 
 
