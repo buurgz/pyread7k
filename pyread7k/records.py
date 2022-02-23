@@ -55,6 +55,13 @@ class BaseRecord:
 class UnsupportedRecord(BaseRecord):
     """Placeholder for unsupported records"""
 
+    def __init__(self, frame, record_type, **kwargs):
+        self.frame = frame
+        self.record_type = record_type
+        for k, v in kwargs.items():
+            self.__dict__[k] = v
+
+
 @dataclass
 class Position(BaseRecord):
     """

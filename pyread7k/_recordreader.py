@@ -43,14 +43,7 @@ def S7KRecordReader(filename: str, records_to_read: List[int] = []) -> Generator
                 offset += drf.size
                 fhandle.seek(offset)
             else:
-                try:
-                    record = _datarecord.record(drf.record_type_id).read(fhandle, drf)
-                except _datarecord.UnsupportedRecordError as exc:
-                    logger.info(exc)
-                    record = records.UnsupportedRecord(drf, drf.record_type_id)
-                except Exception as exc:
-                    # TODO: Do we want to be able to read corrupt files? If so we can just warn about the corrupt file and continue
-                    raise exc
+                record = _datarecord.record(drf.record_type_id).read(fhandle, drf)
                 offset += drf.size
                 fhandle.seek(offset)
                 yield record

@@ -3,6 +3,7 @@ __pycache__
 .vscode
 .py[oc]
 poetry.lock
+scratchpad.py
 
 # general data caches:
 cache

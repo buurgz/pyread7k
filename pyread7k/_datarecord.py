@@ -4,9 +4,9 @@ Low-level classes for reading various 7k record types.
 # pylint: disable=invalid-name unnecessary-comprehension
 import abc
 import io
-from inspect import Attribute
 from typing import Any, Dict, Optional
 from xml.etree import ElementTree as ET
+import logging
 
 import numpy as np
 
@@ -19,6 +19,8 @@ from ._exceptions import (
     MissingFileCatalog,
     UnsupportedRecordError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _bytes_to_str(dict, keys):
@@ -89,10 +91,10 @@ class DataRecord(metaclass=abc.ABCMeta):
     def instance(cls, record_type_id: int):
         """Gets a specific datarecord by type id"""
         if cls.implemented is not None:
-            return cls.implemented.get(record_type_id, None)
+            return cls.implemented.get(record_type_id, _UnsupportedRecord())
         subclasses = cls.__subclasses__()
         cls.implemented = dict((c.record_type_id(), c()) for c in subclasses)
-        return cls.implemented.get(record_type_id, None)
+        return cls.implemented.get(record_type_id, _UnsupportedRecord())
 
     @abc.abstractmethod
     def _read(
@@ -651,13 +653,22 @@ class _DataRecord1018(DataRecord):
         rth = self._block_rth.read(source)
         return records.Velocity(**rth, frame=drf)
 
+class _UnsupportedRecord(DataRecord):
+    """ Unsupported """
+
+    def _read(self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int):
+        source.seek(start_offset)
+        record_bytes = source.read(drf.size)
+
+        return records.UnsupportedRecord(frame=drf, record_type=drf.record_type_id, record_bytes=record_bytes)
+
 
 def record(type_id: int) -> DataRecord:
     """Get a s7k record reader by record id """
 
     rec = DataRecord.instance(type_id)
-    if rec is None:
-        raise UnsupportedRecordError(
+    if isinstance(rec, records.UnsupportedRecord):
+        logger.warning(
             f"DataRecord with type-ID " f"{type_id} is not supported."
         )
     return rec
