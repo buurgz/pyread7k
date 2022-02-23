@@ -6,7 +6,6 @@ import abc
 import io
 from typing import Any, Dict, Optional
 from xml.etree import ElementTree as ET
-import logging
 
 import numpy as np
 
@@ -19,8 +18,6 @@ from ._exceptions import (
     MissingFileCatalog,
     UnsupportedRecordError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def _bytes_to_str(dict, keys):
@@ -666,9 +663,4 @@ class _UnsupportedRecord(DataRecord):
 def record(type_id: int) -> DataRecord:
     """Get a s7k record reader by record id """
 
-    rec = DataRecord.instance(type_id)
-    if isinstance(rec, records.UnsupportedRecord):
-        logger.warning(
-            f"DataRecord with type-ID " f"{type_id} is not supported."
-        )
-    return rec
+    return DataRecord.instance(type_id)

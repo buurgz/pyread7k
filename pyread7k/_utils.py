@@ -67,9 +67,6 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
     
     """
     file_catalog_data = {
-        "frame": None,
-        "size": -1,
-        "version": -1,
         "number_of_records": 0,
         "sizes": [],
         "offsets": [],
