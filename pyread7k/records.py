@@ -52,14 +52,11 @@ class BaseRecord:
     record_type: int  # Should be overridden by subclasses
 
 
+@dataclass
 class UnsupportedRecord(BaseRecord):
     """Placeholder for unsupported records"""
 
-    def __init__(self, frame, record_type, **kwargs):
-        self.frame = frame
-        self.record_type = record_type
-        for k, v in kwargs.items():
-            self.__dict__[k] = v
+    record_bytes: bytes
 
 
 @dataclass
