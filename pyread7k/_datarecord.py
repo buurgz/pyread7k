@@ -654,7 +654,6 @@ class _UnsupportedRecord(DataRecord):
     """ Unsupported """
 
     def _read(self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int):
-        source.seek(start_offset)
         record_bytes = source.read(drf.size - self._block_drf.size - self._block_checksum.size)
 
         return records.UnsupportedRecord(frame=drf, record_type=drf.record_type_id, record_bytes=record_bytes)
