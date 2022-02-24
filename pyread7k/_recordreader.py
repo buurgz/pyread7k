@@ -1,9 +1,7 @@
+from io import SEEK_CUR, BytesIO
 from typing import List, Generator
 from pathlib import Path
-from . import DRFBlock, _datarecord, records
-import logging
-
-logger = logging.getLogger(__name__)
+from . import DRFBlock, _datarecord
 
 
 def S7KRecordReader(filename: str, records_to_read: List[int] = []) -> Generator:
@@ -28,22 +26,38 @@ def S7KRecordReader(filename: str, records_to_read: List[int] = []) -> Generator
         raise TypeError("Filename is not a string")
 
     path = Path(filename)
+    DRF_BYTE_SIZE = DRFBlock().size
+    DRF_START_SIZED_DUMMY = b"0" * DRF_BYTE_SIZE
 
     if not path.exists():
         raise FileNotFoundError(f"Filename '{filename}' could not be found!")
     with path.open(mode="rb", buffering=0) as fhandle:
-        offset = 0
+        drf = DRFBlock().read(fhandle)
         while True:
-            drf = DRFBlock().read(fhandle)
             if drf is None:
                 break
 
-            fhandle.seek(offset)
             if (not (drf.record_type_id in records_to_read)) and len(records_to_read):
-                offset += drf.size
-                fhandle.seek(offset)
+                # If the record type is not in the list of specified records to list
+                # then skip the record and read the next data record frame
+                fhandle.seek(drf.size - DRF_BYTE_SIZE, SEEK_CUR)
+                drf = DRFBlock().read(fhandle)
             else:
-                record = _datarecord.record(drf.record_type_id).read(fhandle, drf)
-                offset += drf.size
-                fhandle.seek(offset)
+                # Otherwise read the record data and the next data record frame.
+                # This way we can handle the read linearly
+                raw_bytes = fhandle.read(drf.size)
+
+                # Because the DataRecord read functionality assumes that we are 
+                # reading from the start of the record, we'll prepend the raw
+                # bytes with the size of the data record frame
+                record_content_bytes = BytesIO(DRF_START_SIZED_DUMMY + raw_bytes)
+                record = _datarecord.record(drf.record_type_id).read(record_content_bytes, drf)
+                if len(raw_bytes) < drf.size:
+                    # If the size of the data record frame is greater than the size
+                    # of the raw bytes it means that there is no more data, indicating
+                    # EOF
+                    drf = None
+                else:
+                    # Read the next data record frame
+                    drf = DRFBlock().read(BytesIO(raw_bytes[-DRF_BYTE_SIZE:]))
                 yield record

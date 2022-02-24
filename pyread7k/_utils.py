@@ -80,10 +80,13 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
     number_of_records = 0
     offset = 0
     frame = None
+
+    drf_dummy = DRFBlock()
+    DRF_BYTE_SIZE = drf_dummy.size
+
+    drf = DRFBlock().read(source)
+
     while True:
-        drf = DRFBlock().read(source)
-        if drf is None:
-            break
         if drf.record_type_id != 7300:
             file_catalog_data["offsets"].append(offset)
             file_catalog_data["sizes"].append(drf.size)
@@ -91,20 +94,34 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
             file_catalog_data["device_ids"].append(drf.device_id)
             file_catalog_data["system_enumerators"].append(drf.system_enumerator)
             file_catalog_data["times"].append(drf.time)
+            # TODO: Fix as this does not work as intended right now
             fragmented = int(drf.size > 60000)
             file_catalog_data["record_counts"].append(fragmented)
             number_of_records += 1
             frame = drf
+
         offset += drf.size
-        source.seek(offset)
+
+        # Read the full record plus the next drf
+        raw_bytes = source.read(drf.size)
+        drf = DRFBlock().read(io.BytesIO(raw_bytes[-DRF_BYTE_SIZE:]))
+
+        if len(raw_bytes) < drf.size:
+            break
+
     source.seek(0)
     file_catalog_data["number_of_records"] = number_of_records
     # Create a dummy frame for the file catalog
     dummy_frame = frame
     # Calculate the size of the record frames data
     dummy_frame.size = (8 + 4 + 2 + 2 + 2 + 10 + 4 + 8 * 2) * number_of_records
-    # Add the size of the drf and the size of a single data record
-    dummy_frame.size += 68 + 14
+    # Add the size of the drf
+    dummy_frame.size += DRF_BYTE_SIZE
+    # Add the size of the record header of 7300
+    dummy_frame.size += 4+4+4+2
+    # Add the size of the checksum
+    dummy_frame.size += 4 
+
     dummy_frame.version = 1
     dummy_frame.record_type_id = 7300
     dummy_frame.system_enumerator = 0
