@@ -269,7 +269,6 @@ class S7KFileReader(S7KReader):
         self._filename = filename
         self._fhandle = open(self._filename, "rb", 0)
         self._catalog_issue_handling = catalog_issue_handling
-        self._file_catalog_missing = False
 
     def _get_stream_for_read(self, offset: int) -> BinaryIO:
         self._fhandle.seek(offset)
@@ -296,17 +295,8 @@ class S7KFileReader(S7KReader):
     @property
     def catalog_issue_handling(self) -> CatalogIssueHandling:
         """Return the catalog issue handling property."""
-        return self._file_catalog_missing
+        return self._catalog_issue_handling
 
-    @property
-    def file_catalog_missing(self) -> bool:
-        """Returns whether the file catalog is missing or not."""
-        return self._file_catalog_missing
-
-    @file_catalog_missing.setter
-    def file_catalog_missing(self, value: bool):
-        """Update the value for the file catalog."""
-        self._file_catalog_missing = value
 
 
 class Ping:
