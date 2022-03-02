@@ -67,7 +67,6 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
     
     """
     file_catalog_data = {
-        "number_of_records": 0,
         "sizes": [],
         "offsets": [],
         "record_types": [],
@@ -104,10 +103,10 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
 
         # Read the full record plus the next drf
         raw_bytes = source.read(drf.size)
-        drf = DRFBlock().read(io.BytesIO(raw_bytes[-DRF_BYTE_SIZE:]))
-
         if len(raw_bytes) < drf.size:
             break
+
+        drf = DRFBlock().read(io.BytesIO(raw_bytes[-DRF_BYTE_SIZE:]))
 
     source.seek(0)
     file_catalog_data["number_of_records"] = number_of_records

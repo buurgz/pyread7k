@@ -52,24 +52,21 @@ class CatalogIssueHandling(Enum):
     """How to handle file catalog issues.
     It has 4 modes, which handle catalog issues differently.
 
-    The first is to silently handle missing catalogs. This makes sure that
+    The first is to handle corrupt catalogs. This makes sure that
     parsing of S7k files using pyread7ks various file and folder datasets is
-    smooth, even when the file catalog is missing, as it can construct the file
+    smooth, even when the file catalog is corrupt, it can construct the file
     catalog with an initial linear read.
 
-    The second is to silently handle corrupt file catalogs. This will work both
-    if the file catalog is said to be missing or not.
+    The second is to handle corrupt file catalogs but warn the user
+    that the file catalog is corrupt. 
 
-    The third is similar to the second, but will enable warnings.
-
-    The fourth is to raise if the file catalog is missing or corrupt
+    The third is to raise if the file catalog is missing or corrupt
 
     """
 
-    HANDLE_MISSING = 1
-    HANDLE_CORRUPT = 2
-    HANDLE_BUT_WARN = 3
-    RAISE = 4
+    HANDLE_CORRUPT = 1
+    HANDLE_BUT_WARN = 2
+    RAISE = 3
 
 
 class S7KReader(metaclass=ABCMeta):
@@ -83,62 +80,35 @@ class S7KReader(metaclass=ABCMeta):
     def catalog_issue_handling(self) -> CatalogIssueHandling:
         """Return the catalog issue handling property."""
 
-    @abstractproperty
-    def file_catalog_missing(self) -> bool:
-        """Returns whether the file catalog is missing or not."""
-
-    @file_catalog_missing.setter
-    def file_catalog_missing(self, value: bool):
-        """Update the value for the file catalog."""
-
     @cached_property
     def file_header(self) -> records.FileHeader:
         """Return the file header record for this reader"""
         fileheader = cast(records.FileHeader, self._read_record(7200, 0))
-        if not fileheader.catalog_offset > 0:
-            if self.catalog_issue_handling == CatalogIssueHandling.RAISE:
-                raise _datarecord.MissingFileCatalog(
-                    "No file catalog found! Use HANDLE_MISSING, HANDLE_CORRUPT, or HANDLE_BUT_WARN if you still want to read it."
-                )
-            elif self.catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN:
-                logger.warning(
-                    "File catalog is missing, the whole file will be scanned to build one. Add a file catalog to your s7k file to prevent this."
-                )
-                self.file_catalog_missing = True
         return fileheader
 
     @cached_property
     def file_catalog(self) -> records.FileCatalog:
         """Return the file catalog record for this reader"""
-        if self.file_catalog_missing:
-            # Assumes that the file catalog is missing, and will rebuild it.
-            # This means that if there is a file catalog, no information from that will be used.
-            filecatalog = self._build_file_catalog()
-        else:
-            try:
-                record7300 = self._read_record(7300, self.file_header.catalog_offset)
-                if record7300 is None:
-                    raise _datarecord.CorruptFileCatalog
-
-                filecatalog = cast(
-                    records.FileCatalog,
-                    self._read_record(7300, self.file_header.catalog_offset),
+        try:
+            if self.file_header.catalog_offset == 0:
+                raise _datarecord.CorruptFileCatalog
+            filecatalog = cast(
+                records.FileCatalog,
+                self._read_record(7300, self.file_header.catalog_offset),
+            )
+        except _datarecord.CorruptFileCatalog as exc:
+            if self._catalog_issue_handling == CatalogIssueHandling.RAISE:
+                raise exc
+            elif (
+                self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN
+            ):
+                logger.warning(
+                    "File catalog was corrupt but a new one was generated."
                 )
-            except _datarecord.CorruptFileCatalog as exc:
-                if self._catalog_issue_handling == CatalogIssueHandling.HANDLE_MISSING:
-                    raise _datarecord.CorruptFileCatalog(
-                        "File catalog is corrupt and issue handling only set to handle missing. Use HANDLE_CORRUPT, or HANDLE_BUT_WARN to attempt to reconstruct the file catalog."
-                    )
-                elif self._catalog_issue_handling == CatalogIssueHandling.RAISE:
-                    raise exc
-                elif (
-                    self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN
-                ):
-                    logger.warning(
-                        "File catalog was corrupt but a new one was generated."
-                    )
-                filecatalog = self._build_file_catalog()
-            return filecatalog
+            filecatalog = self._build_file_catalog()
+        except Exception as exc:
+            raise exc
+        return filecatalog
 
     @cached_property
     def configuration(self) -> records.Configuration:

@@ -51,7 +51,6 @@ class TestFiledatasetFunctions:
 
     @pytest.mark.parametrize("issue_handling, raises", [
         (CatalogIssueHandling.RAISE, pytest.raises(CorruptFileCatalog)),
-        (CatalogIssueHandling.HANDLE_MISSING, pytest.raises(CorruptFileCatalog)),
         (CatalogIssueHandling.HANDLE_CORRUPT, does_not_raise()),
         (CatalogIssueHandling.HANDLE_BUT_WARN, does_not_raise())
     ])

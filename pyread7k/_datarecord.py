@@ -70,10 +70,8 @@ class DataRecord(metaclass=abc.ABCMeta):
             source.seek(start_offset)  # reset source to start
 
             return parsed_data
-        except CorruptFileCatalog as exc:
-            raise exc
         except AttributeError as exc:
-            if drf == {} and self._record_type_id == 7300:
+            if drf is None and self._record_type_id == 7300:
                 raise CorruptFileCatalog(
                     "Corrupt file catalog (record 7300) or incorrect data block!"
                 ) from exc
@@ -253,7 +251,6 @@ class _DataRecord7200(DataRecord):
         except Exception as exc:
             raise MissingFileCatalog(
                 "The optional data of the file header (record 7200) is not present."
-                " This is hypothetically possible given the DFD, but has not been handled yet."
             ) from exc
 
         # return rth, rd, od
@@ -289,19 +286,14 @@ class _DataRecord7300(DataRecord):
     def _read(
         self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
     ):
-        try:
-            rth = self._block_rth.read(source)
-            rd = self._block_rd_entry.read(source, rth["number_of_records"])
-            times_bytes = rd["times"]
-            rd["times"] = tuple(
-                parse_7k_timestamp(b"".join(times_bytes[i : i + 10]))
-                for i in range(0, len(times_bytes), 10)
-            )
-            return records.FileCatalog(**rth, **rd, frame=drf)
-        except AttributeError as exc:
-            raise CorruptFileCatalog(
-                "Corrupt file catalog (record 7300) or incorrect data block!"
-            ) from exc
+        rth = self._block_rth.read(source)
+        rd = self._block_rd_entry.read(source, rth["number_of_records"])
+        times_bytes = rd["times"]
+        rd["times"] = tuple(
+            parse_7k_timestamp(b"".join(times_bytes[i : i + 10]))
+            for i in range(0, len(times_bytes), 10)
+        )
+        return records.FileCatalog(**rth, **rd, frame=drf)
 
 
 class _DataRecord7004(DataRecord):
