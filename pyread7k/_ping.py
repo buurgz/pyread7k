@@ -309,7 +309,7 @@ class Ping:
         self,
         offset_record: Tuple[int, records.SonarSettings],
         next_offset_record: Optional[Tuple[int, records.SonarSettings]],
-        reader: S7KFileReader,
+        reader: S7KReader,
     ):
         self._reader = reader
         self._offset, self.sonar_settings = offset_record
