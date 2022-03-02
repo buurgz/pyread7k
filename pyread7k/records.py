@@ -53,6 +53,13 @@ class BaseRecord:
 
 
 @dataclass
+class UnsupportedRecord(BaseRecord):
+    """Placeholder for unsupported records"""
+
+    record_bytes: bytes
+
+
+@dataclass
 class Position(BaseRecord):
     """
     Record 1003

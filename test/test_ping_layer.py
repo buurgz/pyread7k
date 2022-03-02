@@ -9,7 +9,8 @@ import psutil
 import pytest
 from numpy.testing import assert_almost_equal
 from pyread7k import (ConcatDataset, FileDataset, FolderDataset, PingDataset,
-                      PingType)
+                      PingType, S7KRecordReader)
+                    
 
 from .conftest import bf_filepath, does_not_raise, filedataset, root_dir
 
@@ -127,3 +128,19 @@ def test_folderdataset_input(folderpath, expected, raises):
     with raises:
         result = FolderDataset(folderpath, include=PingType.BEAMFORMED)
         assert isinstance(result, expected)
+
+
+def test_records_reader_linear_read():
+    stream_reader = S7KRecordReader(bf_filepath)
+    records = [record for record in stream_reader]
+    assert len(records) > 0
+
+def test_records_reader_bad_path_exception():
+    with pytest.raises(FileNotFoundError):
+        [r for r in S7KRecordReader("not a real path")]
+
+
+def test_records_reader_non_existing_record_returns_empty_recordlist():
+    stream_reader = S7KRecordReader(bf_filepath, records_to_read=[1202391283098123])
+    records = [record for record in stream_reader]
+    assert len(records) == 0

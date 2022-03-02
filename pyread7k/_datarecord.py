@@ -11,6 +11,13 @@ import numpy as np
 
 from . import records
 from ._datablock import DataBlock, DRFBlock, elemD_, elemT, parse_7k_timestamp
+from ._exceptions import (
+    CorruptFileCatalog,
+    CorruptFileHeader,
+    CorruptRecordDataError,
+    MissingFileCatalog,
+    UnsupportedRecordError,
+)
 
 
 def _bytes_to_str(dict, keys):
@@ -37,31 +44,52 @@ class DataRecord(metaclass=abc.ABCMeta):
     implemented: Optional[Dict[int, Any]] = None
     _record_type_id = None
 
-    def read(self, source: io.RawIOBase):
-        """Base record reader"""
+    def read(self, source: io.RawIOBase, drf: Optional[records.DataRecordFrame] = None):
+        """Base record reader.
+        
+        Args:
+            source (io.RawIOBase): The bytes object to read from
+            drf (:obj: `records.DataRecordFrame`, optional): An optional input to minimize reads
+        Returns:
+            A data record
+        
+        """
         start_offset = source.tell()
-        drf = self._block_drf.read(source)
-        source.seek(start_offset)
-        source.seek(4, io.SEEK_CUR)  # to sync pattern
-        source.seek(drf.offset, io.SEEK_CUR)
+        if drf is None:
+            drf = self._block_drf.read(source)
+        try:
+            source.seek(start_offset)
+            source.seek(4, io.SEEK_CUR)  # to sync pattern
+            source.seek(drf.offset, io.SEEK_CUR)
 
-        parsed_data = self._read(source, drf, start_offset)
+            parsed_data = self._read(source, drf, start_offset)
 
-        checksum = self._block_checksum.read(source)["checksum"]
-        if drf.flags & 0b1 > 0:  # Check if checksum is valid
-            drf.checksum = checksum
-        source.seek(start_offset)  # reset source to start
+            checksum = self._block_checksum.read(source)["checksum"]
+            if drf.flags & 0b1 > 0:  # Check if checksum is valid
+                drf.checksum = checksum
+            source.seek(start_offset)  # reset source to start
 
-        return parsed_data
+            return parsed_data
+        except AttributeError as exc:
+            if drf is None and self._record_type_id == 7300:
+                raise CorruptFileCatalog(
+                    "Corrupt file catalog (record 7300) or incorrect data block!"
+                ) from exc
+            if self._record_type_id == 7200:
+                raise CorruptFileHeader(
+                    "Corrupt file header (record 7200) or incorrect data block!"
+                )
+        except ValueError as exc:
+            raise exc
 
     @classmethod
     def instance(cls, record_type_id: int):
         """Gets a specific datarecord by type id"""
-        if not cls.implemented is None:
-            return cls.implemented.get(record_type_id, None)
+        if cls.implemented is not None:
+            return cls.implemented.get(record_type_id, _UnsupportedRecord())
         subclasses = cls.__subclasses__()
         cls.implemented = dict((c.record_type_id(), c()) for c in subclasses)
-        return cls.implemented.get(record_type_id, None)
+        return cls.implemented.get(record_type_id, _UnsupportedRecord())
 
     @abc.abstractmethod
     def _read(
@@ -215,10 +243,15 @@ class _DataRecord7200(DataRecord):
                 "notes",
             ],
         )
-        rd = self._block_rd_device_type.read(source, rth["number_of_devices"])
-        source.seek(start_offset)
-        source.seek(drf.optional_data_offset, io.SEEK_CUR)
-        od = self._block_od.read(source)
+        try:
+            rd = self._block_rd_device_type.read(source, rth["number_of_devices"])
+            source.seek(start_offset)
+            source.seek(drf.optional_data_offset, io.SEEK_CUR)
+            od = self._block_od.read(source)
+        except Exception as exc:
+            raise MissingFileCatalog(
+                "The optional data of the file header (record 7200) is not present."
+            ) from exc
 
         # return rth, rd, od
         return records.FileHeader(**rth, **rd, **od, frame=drf)
@@ -346,16 +379,22 @@ class _DataRecord7018(DataRecord):
     def _read(
         self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
     ):
+        _start_offset = source.tell()
         rth = self._block_rth.read(source)
         n_samples = rth["number_of_samples"]
         n_beams = rth["number_of_beams"]
         count = n_samples * n_beams
-        rd = self._block_rd_amp_phs.read_dense(source, count)
-        rd = rd.reshape((n_samples, n_beams))
+        try:
+            rd = self._block_rd_amp_phs.read_dense(source, count)
+            rd = rd.reshape((n_samples, n_beams))
 
-        return records.Beamformed(
-            **rth, amplitudes=rd["amp"], phases=rd["phs"], frame=drf
-        )
+            return records.Beamformed(
+                **rth, amplitudes=rd["amp"], phases=rd["phs"], frame=drf
+            )
+        except ValueError as exc:
+            raise CorruptRecordDataError(
+                f"Record {self._record_type_id} at {_start_offset} has corrupt record data!"
+            ) from exc
 
 
 class _DataRecord7028(DataRecord):
@@ -603,11 +642,16 @@ class _DataRecord1018(DataRecord):
         rth = self._block_rth.read(source)
         return records.Velocity(**rth, frame=drf)
 
+class _UnsupportedRecord(DataRecord):
+    """ Unsupported """
+
+    def _read(self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int):
+        record_bytes = source.read(drf.size - self._block_drf.size - self._block_checksum.size)
+
+        return records.UnsupportedRecord(frame=drf, record_type=drf.record_type_id, record_bytes=record_bytes)
+
 
 def record(type_id: int) -> DataRecord:
     """Get a s7k record reader by record id """
 
-    rec = DataRecord.instance(type_id)
-    if rec is None:
-        raise ValueError(f"DataRecord with type-ID " f"{type_id} is not supported.")
-    return rec
+    return DataRecord.instance(type_id)

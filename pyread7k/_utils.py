@@ -1,4 +1,5 @@
 import collections
+from copy import copy
 import csv
 import functools
 import io
@@ -6,8 +7,9 @@ import itertools as it
 from typing import Iterable, Iterator, Tuple, TypeVar
 
 from . import records
+from ._datablock import DRFBlock
 from ._datarecord import record as _record
-from .records import FileCatalog, FileHeader
+from .records import DataRecordFrame, FileCatalog, FileHeader
 
 __all__ = [
     "read_file_header",
@@ -54,6 +56,81 @@ def read_file_catalog(source: io.RawIOBase, file_header: FileHeader) -> FileCata
     source.seek(file_header.catalog_offset)
     file_catalog: FileCatalog = _record(7300).read(source)
     return file_catalog
+
+
+def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
+    """ Build the file catalog using linear reading of s7k file. 
+
+    This utility function is used to construct a file catalog by reading through
+    the records in the s7k file. It currently correctly handles all but:
+    record_counts.
+    
+    """
+    file_catalog_data = {
+        "sizes": [],
+        "offsets": [],
+        "record_types": [],
+        "device_ids": [],
+        "system_enumerators": [],
+        "times": [],
+        "record_counts": [],
+    }
+    source.seek(0)
+    number_of_records = 0
+    offset = 0
+    frame = None
+
+    drf_dummy = DRFBlock()
+    DRF_BYTE_SIZE = drf_dummy.size
+
+    drf = DRFBlock().read(source)
+
+    while True:
+        if drf.record_type_id != 7300:
+            file_catalog_data["offsets"].append(offset)
+            file_catalog_data["sizes"].append(drf.size)
+            file_catalog_data["record_types"].append(drf.record_type_id)
+            file_catalog_data["device_ids"].append(drf.device_id)
+            file_catalog_data["system_enumerators"].append(drf.system_enumerator)
+            file_catalog_data["times"].append(drf.time)
+            # TODO: Fix as this does not work as intended right now
+            fragmented = int(drf.size > 60000)
+            file_catalog_data["record_counts"].append(fragmented)
+            number_of_records += 1
+            frame = drf
+
+        offset += drf.size
+
+        # Read the full record plus the next drf
+        raw_bytes = source.read(drf.size)
+        if len(raw_bytes) < drf.size:
+            break
+
+        drf = DRFBlock().read(io.BytesIO(raw_bytes[-DRF_BYTE_SIZE:]))
+
+    source.seek(0)
+    file_catalog_data["number_of_records"] = number_of_records
+    # Create a dummy frame for the file catalog
+    dummy_frame = frame
+    # Calculate the size of the record frames data
+    dummy_frame.size = (8 + 4 + 2 + 2 + 2 + 10 + 4 + 8 * 2) * number_of_records
+    # Add the size of the drf
+    dummy_frame.size += DRF_BYTE_SIZE
+    # Add the size of the record header of 7300
+    dummy_frame.size += 4+4+4+2
+    # Add the size of the checksum
+    dummy_frame.size += 4 
+
+    dummy_frame.version = 1
+    dummy_frame.record_type_id = 7300
+    dummy_frame.system_enumerator = 0
+    dummy_frame.flags = 0
+    dummy_frame.checksum = None 
+    dummy_frame.device_id = 7000 # System event id
+    file_catalog_data["frame"] = dummy_frame
+    file_catalog_data["size"] = 14
+    file_catalog_data["version"] = 1
+    return FileCatalog(**file_catalog_data)
 
 
 def get_record_offsets(type_id: int, file_catalog: FileCatalog) -> tuple:

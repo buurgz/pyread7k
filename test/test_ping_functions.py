@@ -1,8 +1,9 @@
 import pytest
 from dotenv import find_dotenv, load_dotenv
-from pyread7k import FileDataset, Ping, PingDataset, PingType
+from pyread7k import FileDataset, Ping, PingDataset, PingType, CatalogIssueHandling
+from pyread7k._exceptions import CorruptFileCatalog, MissingFileCatalog
 
-from .conftest import bf_filepath, does_not_raise, filedataset
+from .conftest import bf_filepath, does_not_raise, filedataset, corrupt_filepath
 
 load_dotenv(find_dotenv())
 
@@ -47,4 +48,13 @@ class TestFiledatasetFunctions:
         for p in dataset:
             ping_number = int(p.sonar_settings.ping_number)
             assert isinstance(dataset.index_of(ping_number), int)
+
+    @pytest.mark.parametrize("issue_handling, raises", [
+        (CatalogIssueHandling.RAISE, pytest.raises(CorruptFileCatalog)),
+        (CatalogIssueHandling.HANDLE_CORRUPT, does_not_raise()),
+        (CatalogIssueHandling.HANDLE_BUT_WARN, does_not_raise())
+    ])
+    def test_filedataset_filecatalog_handling(self, issue_handling, raises):
+        with raises:
+            FileDataset(corrupt_filepath, catalog_issue_handling=issue_handling)
 

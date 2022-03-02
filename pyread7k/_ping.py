@@ -10,14 +10,14 @@ Expected order of records for a ping:
 
 """
 import bisect
-import glob
-import os
+import logging
 import sys
 import warnings
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from datetime import datetime, timedelta
 from enum import Enum
 from itertools import chain
+from pathlib import Path
 from typing import (
     Any,
     BinaryIO,
@@ -28,14 +28,16 @@ from typing import (
     Sequence,
     Tuple,
     Union,
-    cast,
+    cast
 )
 
 import geopy
 import numpy as np
 
 from . import _datarecord, records
-from ._utils import cached_property, window
+from ._utils import build_file_catalog, cached_property, window
+
+logger = logging.getLogger(__name__)
 
 
 class PingType(Enum):
@@ -46,6 +48,27 @@ class PingType(Enum):
     ANY = 3
 
 
+class CatalogIssueHandling(Enum):
+    """How to handle file catalog issues.
+    It has 4 modes, which handle catalog issues differently.
+
+    The first is to handle corrupt catalogs. This makes sure that
+    parsing of S7k files using pyread7ks various file and folder datasets is
+    smooth, even when the file catalog is corrupt, it can construct the file
+    catalog with an initial linear read.
+
+    The second is to handle corrupt file catalogs but warn the user
+    that the file catalog is corrupt. 
+
+    The third is to raise if the file catalog is missing or corrupt
+
+    """
+
+    HANDLE_CORRUPT = 1
+    HANDLE_BUT_WARN = 2
+    RAISE = 3
+
+
 class S7KReader(metaclass=ABCMeta):
     """
     Base abstract class of S7K readers
@@ -53,18 +76,39 @@ class S7KReader(metaclass=ABCMeta):
     *Note*: The current S7KReader API is considered unstable and may change in the future.
     """
 
+    @abstractproperty
+    def catalog_issue_handling(self) -> CatalogIssueHandling:
+        """Return the catalog issue handling property."""
+
     @cached_property
     def file_header(self) -> records.FileHeader:
         """Return the file header record for this reader"""
-        return cast(records.FileHeader, self._read_record(7200, 0))
+        fileheader = cast(records.FileHeader, self._read_record(7200, 0))
+        return fileheader
 
     @cached_property
     def file_catalog(self) -> records.FileCatalog:
         """Return the file catalog record for this reader"""
-        return cast(
-            records.FileCatalog,
-            self._read_record(7300, self.file_header.catalog_offset),
-        )
+        try:
+            if self.file_header.catalog_offset == 0:
+                raise _datarecord.CorruptFileCatalog
+            filecatalog = cast(
+                records.FileCatalog,
+                self._read_record(7300, self.file_header.catalog_offset),
+            )
+        except _datarecord.CorruptFileCatalog as exc:
+            if self._catalog_issue_handling == CatalogIssueHandling.RAISE:
+                raise exc
+            elif (
+                self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN
+            ):
+                logger.warning(
+                    "File catalog was corrupt but a new one was generated."
+                )
+            filecatalog = self._build_file_catalog()
+        except Exception as exc:
+            raise exc
+        return filecatalog
 
     @cached_property
     def configuration(self) -> records.Configuration:
@@ -209,17 +253,30 @@ class S7KReader(metaclass=ABCMeta):
     def _get_stream_for_read(self, offset: int) -> BinaryIO:
         """Return a byte stream for reading a record at the given offset"""
 
+    @abstractmethod
+    def _build_file_catalog(self) -> records.FileCatalog:
+        """ Build the file catalog. """
+
 
 class S7KFileReader(S7KReader):
     """Reader class for s7k files"""
 
-    def __init__(self, filename: str):
+    def __init__(
+        self,
+        filename: str,
+        catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.RAISE,
+    ):
         self._filename = filename
-        self._fhandle = open(self._filename, "rb", buffering=0)
+        self._fhandle = open(self._filename, "rb", 0)
+        self._catalog_issue_handling = catalog_issue_handling
 
     def _get_stream_for_read(self, offset: int) -> BinaryIO:
         self._fhandle.seek(offset)
         return self._fhandle
+
+    def _build_file_catalog(self) -> records.FileCatalog:
+        self._fhandle.seek(0)
+        return build_file_catalog(self._fhandle)
 
     def __getstate__(self) -> Dict[str, Any]:
         """ Remove unpicklable file handle from dict before pickling. """
@@ -234,6 +291,12 @@ class S7KFileReader(S7KReader):
 
     def __del__(self) -> None:
         self._fhandle.close()
+
+    @property
+    def catalog_issue_handling(self) -> CatalogIssueHandling:
+        """Return the catalog issue handling property."""
+        return self._catalog_issue_handling
+
 
 
 class Ping:
@@ -263,16 +326,13 @@ class Ping:
 
     @property
     def ping_number(self) -> int:
+        """Return ping number from the sonar settings record."""
         return self.sonar_settings.ping_number
 
     @property
     def configuration(self) -> records.Configuration:
         """Return the 7001 record, which is shared for all pings in a file"""
         return self._reader.configuration
-
-    @cached_property
-    def ping_number(self) -> int:
-        return self.sonar_settings.ping_number
 
     @cached_property
     def position_set(self) -> List[records.Position]:
@@ -401,11 +461,18 @@ class FileDataset:
 
     """
 
-    def __init__(self, filename: str, include: PingType = PingType.ANY):
+    def __init__(
+        self,
+        filename: str,
+        include: PingType = PingType.ANY,
+        catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.RAISE,
+    ):
         """
         if include argument is not ANY, pings will be filtered.
         """
-        self.pings = list(S7KFileReader(filename).iter_pings(include))
+        self.pings = list(
+            S7KFileReader(filename, catalog_issue_handling).iter_pings(include)
+        )
         self._ping_numbers = [p.ping_number for p in self.pings]
 
     @property
@@ -528,16 +595,22 @@ class FolderDataset(ConcatDataset):
 
     """
 
-    def __init__(self, folderpath: str, include: PingType = PingType.ANY):
+    def __init__(
+        self,
+        folderpath: str,
+        include: PingType = PingType.ANY,
+        catalog_issue_handling=CatalogIssueHandling.RAISE,
+    ):
+        path = Path(folderpath)
         if isinstance(folderpath, str):
             # Check if it is a file, or directory
-            if not os.path.isdir(folderpath):
+            if not path.is_dir():
                 raise (
                     FileNotFoundError(
                         f"Provided folder '{folderpath}' could not be located"
                     )
                 )
-            filenames = glob.glob(os.path.join(folderpath, "*.s7k"))
+            filenames = list(path.glob("*.s7k"))
 
             if len(filenames) == 0:
                 raise ValueError("Provided pathname did not match any files")
@@ -546,7 +619,11 @@ class FolderDataset(ConcatDataset):
 
         datasets = []
         for f in filenames:
-            datasets.append(FileDataset(f, include=include))
+            datasets.append(
+                FileDataset(
+                    f, include=include, catalog_issue_handling=catalog_issue_handling
+                )
+            )
 
         # We should start by ordering the datasets by time
         self.datasets = sorted(datasets, key=lambda x: x[0].sonar_settings.frame.time)
