@@ -6,6 +6,7 @@ import os
 from collections.abc import Iterable
 
 import psutil
+from pyread7k.records import DetectionFlags
 import pytest
 from numpy.testing import assert_almost_equal
 from pyread7k import (ConcatDataset, FileDataset, FolderDataset, PingDataset,
@@ -101,6 +102,9 @@ def test_folder_dataset_iterate():
     ds = FolderDataset(os.path.dirname(bf_filepath),
                        include=PingType.BEAMFORMED)
     for i, p in enumerate(ds):
+        if i % 10 != 0:
+            # For speed, only sample every 10th ping
+            continue
         assert p == ds[i]
         assert_almost_equal(p.beamformed.amplitudes,
                             ds[i].beamformed.amplitudes)
@@ -144,3 +148,28 @@ def test_records_reader_non_existing_record_returns_empty_recordlist():
     stream_reader = S7KRecordReader(bf_filepath, records_to_read=[1202391283098123])
     records = [record for record in stream_reader]
     assert len(records) == 0
+
+
+def test_7027_records(filedataset: FileDataset):
+    """
+    Check that various properties of 7027 records are correct.
+    """
+    with_detections = 0
+    has_raw_detections = False
+    for ping in filedataset:
+        if ping.raw_detections is None:
+            continue
+        has_raw_detections = True
+        with_detections += 1
+        raw_detections = ping.raw_detections
+        assert raw_detections.detections.shape[0] == raw_detections.detection_count
+        assert isinstance(
+            raw_detections.parse_detection_flags(raw_detections.detections[0])[0],
+            DetectionFlags
+        )
+        for name in ["beam_descriptor", "detection_point", "rx_angle", "flags",
+                     "quality", "uncertainty", "intensity"]:
+            # The usual test file does not have min or max limit, but is still valid
+            assert name in raw_detections.detections.dtype.names 
+
+    assert has_raw_detections
