@@ -150,26 +150,34 @@ def test_records_reader_non_existing_record_returns_empty_recordlist():
     assert len(records) == 0
 
 
-def test_7027_records(filedataset: FileDataset):
-    """
-    Check that various properties of 7027 records are correct.
-    """
-    with_detections = 0
-    has_raw_detections = False
-    for ping in filedataset:
-        if ping.raw_detections is None:
-            continue
-        has_raw_detections = True
-        with_detections += 1
-        raw_detections = ping.raw_detections
-        assert raw_detections.detections.shape[0] == raw_detections.detection_count
-        assert isinstance(
-            raw_detections.parse_detection_flags(raw_detections.detections[0])[0],
-            DetectionFlags
-        )
-        for name in ["beam_descriptor", "detection_point", "rx_angle", "flags",
-                     "quality", "uncertainty", "intensity"]:
-            # The usual test file does not have min or max limit, but is still valid
-            assert name in raw_detections.detections.dtype.names 
+class Test7027Records:
+    def test_detection_shape(self, filedataset):
+        for ping in filedataset:
+            if ping.raw_detections is None:
+                continue
+            assert ping.raw_detections.detections.shape[0] == ping.raw_detections.detection_count
 
-    assert has_raw_detections
+    def test_detection_flag_type(self, filedataset):
+        for ping in filedataset:
+            if ping.raw_detections is None:
+                continue
+            assert isinstance(
+                ping.raw_detections.parse_detection_flags(ping.raw_detections.detections[0])[0],
+                DetectionFlags
+            )
+        
+    def test_columns_in_detections(self, filedataset):
+        for ping in filedataset:
+            if ping.raw_detections is None:
+                continue
+            for name in ["beam_descriptor", "detection_point", "rx_angle", "flags",
+                        "quality", "uncertainty", "intensity"]:
+                # The usual test file does not have min or max limit, but is still valid
+                assert name in ping.raw_detections.detections.dtype.names 
+    def test_file_has_7027(self, filedataset):
+        has_raw_detections = False
+        for ping in filedataset:
+            if ping.raw_detections is not None:
+                has_raw_detections = True
+
+        assert has_raw_detections
