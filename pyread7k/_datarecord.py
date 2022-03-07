@@ -40,16 +40,16 @@ def _record_data_block(fields, data_field_size):
     """
     Some Record Data segments may have fields added in the future.
     To understand what fields are available, a field size must be read.
-    If there are more fields in `items` than data field size can handle, those
-    are removed. If there are fewer, an unparsed field is added to `items`.
+    If there are more fields in `fields` than data field size can handle, those
+    are removed. If there are fewer, an unparsed field is added to `fields`.
     """
     field_size_accumulator = 0
-    for index, item in enumerate(fields):
-        if len(item) == 2:
-            _name, elem_type = item
+    for index, field in enumerate(fields):
+        if len(field) == 2:
+            _name, elem_type = field
             count = 1
         else:
-            _name, elem_type, count = item
+            _name, elem_type, count = field
 
         _, _, elem_size = map_size_to_fmt[elem_type]
 
@@ -62,14 +62,14 @@ def _record_data_block(fields, data_field_size):
         raise CorruptRecordDataError(
             "Record data field lengths could not be matched to data field size"
         )
-    available_items = fields[:index + 1]
+    available_fields = fields[:index + 1]
     if field_size_accumulator < data_field_size:
         # There are unknown fields added since this code was written.
         # These are added as a "reserved" field so that sizes line up.
         unknown_size = data_field_size - field_size_accumulator
-        available_items += ((None, elemT.c8, unknown_size),)
+        available_fields += ((None, elemT.c8, unknown_size),)
 
-    return _datablock_elemd(*available_items)
+    return _datablock_elemd(*available_fields)
 
 
 class DataRecord(metaclass=abc.ABCMeta):

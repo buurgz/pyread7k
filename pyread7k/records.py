@@ -364,7 +364,7 @@ class RawDetectionData(BaseRecord):
     @property
     def uncertainty_method(self) -> UncertaintyMethod:
         """ Parse flags to get uncertainty method """
-        return UncertaintyMethod(self.flags & 0b111) # Extract lower 3 bits
+        return UncertaintyMethod(self._flags & 0b111) # Extract lower 3 bits
 
     @property
     def multi_detection_enabled(self) -> bool:
