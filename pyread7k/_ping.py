@@ -355,6 +355,11 @@ class Ping:
         return cast(List[records.Heading], self._read_records(1013))
 
     @cached_property
+    def pan_tilt_roll_set(self) -> List[records.PanTiltRoll]:
+        """ Returns all 1017 records timestamped within this ping. """
+        return cast(List[records.PanTiltRoll], self._read_records(1017))
+
+    @cached_property
     def velocity_set(self) -> List[records.Velocity]:
         """ Returns all 1018 records timestamped within this ping. """
         return cast(List[records.Velocity], self._read_records(1018))
@@ -381,6 +386,11 @@ class Ping:
     def beamformed(self) -> Optional[records.Beamformed]:
         """ Returns 7018 record """
         return cast(Optional[records.Beamformed], self._read_record(7018))
+
+    @cached_property
+    def raw_detections(self) -> Optional[records.RawDetectionData]:
+        """ Returns 7027 record """
+        return cast(Optional[records.RawDetectionData], self._read_record(7027))
 
     @cached_property
     def snippets(self) -> Optional[records.SnippetData]:
@@ -428,7 +438,7 @@ class Ping:
         Clears all memory-heavy properties.
         Retains offsets for easy reloading.
         """
-        for key in "beamformed", "tvg", "beam_geometry", "raw_iq", "snippets":
+        for key in "beamformed", "tvg", "beam_geometry", "raw_iq", "snippets", "raw_detections":
             if key in self.__dict__:
                 del self.__dict__[key]
 

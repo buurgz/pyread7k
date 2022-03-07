@@ -10,7 +10,7 @@ from xml.etree import ElementTree as ET
 import numpy as np
 
 from . import records
-from ._datablock import DataBlock, DRFBlock, elemD_, elemT, parse_7k_timestamp
+from ._datablock import DataBlock, DRFBlock, elemD_, elemT, parse_7k_timestamp, map_size_to_fmt
 from ._exceptions import (
     CorruptFileCatalog,
     CorruptFileHeader,
@@ -29,6 +29,47 @@ def _bytes_to_str(dict, keys):
         byte_list = dict[key]
         termination = byte_list.index(b"\x00")
         dict[key] = b"".join(byte_list[:termination]).decode("UTF-8")
+
+
+def _datablock_elemd(*items):
+    """ Maps the elemD function on arguments before passing to DataBlock """
+    return DataBlock(tuple(elemD_(*elems) for elems in items))
+
+
+def _record_data_block(fields, data_field_size):
+    """
+    Some Record Data segments may have fields added in the future.
+    To understand what fields are available, a field size must be read.
+    If there are more fields in `fields` than data field size can handle, those
+    are removed. If there are fewer, an unparsed field is added to `fields`.
+    """
+    field_size_accumulator = 0
+    for index, field in enumerate(fields):
+        if len(field) == 2:
+            _name, elem_type = field
+            count = 1
+        else:
+            _name, elem_type, count = field
+
+        _, _, elem_size = map_size_to_fmt[elem_type]
+
+        field_size_accumulator += count * elem_size
+        
+        if field_size_accumulator >= data_field_size:
+            break
+    if field_size_accumulator > data_field_size:
+        # The forloop was broken, but sizes did not align
+        raise CorruptRecordDataError(
+            "Record data field lengths could not be matched to data field size"
+        )
+    available_fields = fields[:index + 1]
+    if field_size_accumulator < data_field_size:
+        # There are unknown fields added since this code was written.
+        # These are added as a "reserved" field so that sizes line up.
+        unknown_size = data_field_size - field_size_accumulator
+        available_fields += ((None, elemT.c8, unknown_size),)
+
+    return _datablock_elemd(*available_fields)
 
 
 class DataRecord(metaclass=abc.ABCMeta):
@@ -79,6 +120,7 @@ class DataRecord(metaclass=abc.ABCMeta):
                 raise CorruptFileHeader(
                     "Corrupt file header (record 7200) or incorrect data block!"
                 )
+            raise exc # If the error is unknown, propagate it
         except ValueError as exc:
             raise exc
 
@@ -397,6 +439,49 @@ class _DataRecord7018(DataRecord):
             ) from exc
 
 
+class _DataRecord7027(DataRecord):
+    """ Raw Detection data """
+
+    _record_type_id = 7027
+    _block_rth = _datablock_elemd(
+        ("sonar_id", elemT.u64),
+        ("ping_number", elemT.u32),
+        ("multi_ping_sequence", elemT.u16),
+        ("detection_count", elemT.u32),
+        ("data_field_size", elemT.u32),
+        ("detection_algorithm", elemT.u8),
+        ("_flags", elemT.u32),
+        ("sampling_rate", elemT.f32),
+        ("tx_angle", elemT.f32),
+        ("applied_roll", elemT.f32),
+        (None, elemT.u32, 15),
+    )
+
+    _rd_fields = (
+        ("beam_descriptor", elemT.u16),
+        ("detection_point", elemT.f32),
+        ("rx_angle", elemT.f32),
+        ("flags", elemT.u32),
+        ("quality", elemT.u32),
+        ("uncertainty", elemT.f32),
+        ("intensity", elemT.f32),
+        ("min_limit", elemT.f32),
+        ("max_limit", elemT.f32),
+    )
+
+    def _read(
+        self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
+    ):
+        rth = self._block_rth.read(source)
+        rth["detection_algorithm"] = records.DetectionAlgorithm(rth["detection_algorithm"])
+
+        # The block_rd may change based on data_field_size
+        block_rd = _record_data_block(self._rd_fields, rth["data_field_size"])
+        rd = block_rd.read_dense(source, rth["detection_count"])
+
+        return records.RawDetectionData(**rth, detections=rd, frame=drf)
+
+
 class _DataRecord7028(DataRecord):
     """ Snippet data """
 
@@ -622,6 +707,26 @@ class _DataRecord1013(DataRecord):
         rd = None  # no rd
         od = None  # no optional data
         return records.Heading(**rth, frame=drf)
+
+
+class _DataRecord1017(DataRecord):
+    """ PanTiltRoll """
+
+    _record_type_id = 1017
+    _block_rth = _datablock_elemd(
+        ("pan", elemT.f32),
+        ("tilt", elemT.f32),
+        ("roll", elemT.f32),
+        ("pan_error", elemT.u32),
+        ("tilt_error", elemT.u32),
+        ("roll_error", elemT.u32),
+    )
+
+    def _read(
+        self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
+    ):
+        rth = self._block_rth.read(source)
+        return records.PanTiltRoll(**rth, frame=drf)
 
 
 class _DataRecord1018(DataRecord):

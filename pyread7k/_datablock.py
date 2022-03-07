@@ -51,6 +51,21 @@ def parse_7k_timestamp(bs: bytes) -> datetime:
     )
     return t
 
+map_size_to_fmt = dict(
+    (
+        (elemT.c8, ("c", "B", 1)),
+        (elemT.i8, ("b", "b", 1)),
+        (elemT.u8, ("B", "u1", 1)),
+        (elemT.i16, ("h", "i2", 2)),
+        (elemT.u16, ("H", "u2", 2)),
+        (elemT.i32, ("i", "i4", 4)),
+        (elemT.u32, ("I", "u4", 4)),
+        (elemT.i64, ("q", "i8", 8)),
+        (elemT.u64, ("Q", "u8", 8)),
+        (elemT.f32, ("f", "f4", 4)),
+        (elemT.f64, ("d", "f8", 8)),
+    )
+)
 
 class DataBlock(metaclass=abc.ABCMeta):
     """
@@ -58,21 +73,6 @@ class DataBlock(metaclass=abc.ABCMeta):
     """
 
     _byte_order_fmt = "<"
-    _map_size_to_fmt = dict(
-        (
-            (elemT.c8, ("c", "B", 1)),
-            (elemT.i8, ("b", "b", 1)),
-            (elemT.u8, ("B", "u1", 1)),
-            (elemT.i16, ("h", "i2", 2)),
-            (elemT.u16, ("H", "u2", 2)),
-            (elemT.i32, ("i", "i4", 4)),
-            (elemT.u32, ("I", "u4", 4)),
-            (elemT.i64, ("q", "i8", 8)),
-            (elemT.u64, ("Q", "u8", 8)),
-            (elemT.f32, ("f", "f4", 4)),
-            (elemT.f64, ("d", "f8", 8)),
-        )
-    )
 
     def __init__(self, elements):
         self._sizes = self._util_take_sizes(elements)
@@ -136,7 +136,7 @@ class DataBlock(metaclass=abc.ABCMeta):
         fmts = [cls._byte_order_fmt]
         for type_name, count in sizes:
             count = "" if count == 1 else str(count)
-            fmt, *_ = cls._map_size_to_fmt[type_name]
+            fmt, *_ = map_size_to_fmt[type_name]
             fmts.append(str(count) + fmt)
         return struct.Struct("".join(fmts))
 
@@ -149,7 +149,7 @@ class DataBlock(metaclass=abc.ABCMeta):
         types = []
         for idx, (name, (type_name, count)) in enumerate(zip(names, sizes)):
             name = f_name_fixer(idx, name)
-            _, fmt, *_ = cls._map_size_to_fmt[type_name]
+            _, fmt, *_ = map_size_to_fmt[type_name]
             type_spec = [name, f"{bom}{fmt}"]
             if count > 1:
                 type_spec += [(count,)]

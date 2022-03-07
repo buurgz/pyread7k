@@ -6,6 +6,7 @@ import os
 from collections.abc import Iterable
 
 import psutil
+from pyread7k.records import DetectionFlags
 import pytest
 from numpy.testing import assert_almost_equal
 from pyread7k import (ConcatDataset, FileDataset, FolderDataset, PingDataset,
@@ -101,6 +102,9 @@ def test_folder_dataset_iterate():
     ds = FolderDataset(os.path.dirname(bf_filepath),
                        include=PingType.BEAMFORMED)
     for i, p in enumerate(ds):
+        if i % 10 != 0:
+            # For speed, only sample every 10th ping
+            continue
         assert p == ds[i]
         assert_almost_equal(p.beamformed.amplitudes,
                             ds[i].beamformed.amplitudes)
@@ -144,3 +148,36 @@ def test_records_reader_non_existing_record_returns_empty_recordlist():
     stream_reader = S7KRecordReader(bf_filepath, records_to_read=[1202391283098123])
     records = [record for record in stream_reader]
     assert len(records) == 0
+
+
+class Test7027Records:
+    def test_detection_shape(self, filedataset):
+        for ping in filedataset:
+            if ping.raw_detections is None:
+                continue
+            assert ping.raw_detections.detections.shape[0] == ping.raw_detections.detection_count
+
+    def test_detection_flag_type(self, filedataset):
+        for ping in filedataset:
+            if ping.raw_detections is None:
+                continue
+            assert isinstance(
+                ping.raw_detections.parse_detection_flags(ping.raw_detections.detections[0])[0],
+                DetectionFlags
+            )
+        
+    def test_columns_in_detections(self, filedataset):
+        for ping in filedataset:
+            if ping.raw_detections is None:
+                continue
+            for name in ["beam_descriptor", "detection_point", "rx_angle", "flags",
+                        "quality", "uncertainty", "intensity"]:
+                # The usual test file does not have min or max limit, but is still valid
+                assert name in ping.raw_detections.detections.dtype.names 
+    def test_file_has_7027(self, filedataset):
+        has_raw_detections = False
+        for ping in filedataset:
+            if ping.raw_detections is not None:
+                has_raw_detections = True
+
+        assert has_raw_detections

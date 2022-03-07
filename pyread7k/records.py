@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, Tuple
 from xml.etree import ElementTree as ET
 
 import numpy as np
@@ -139,6 +139,22 @@ class Heading(BaseRecord):
     record_type: int = field(default=1013, init=False)
 
     heading: float
+
+
+@dataclass
+class PanTiltRoll(BaseRecord):
+    """
+    Record 1017 Pan tilt and roll in radians from external source.
+    Non-zero values in error fields indicate error types.
+    """
+    record_type: int = field(default=1017, init=False)
+    pan: float
+    tilt: float
+    roll: float
+
+    pan_error: int
+    tilt_error: int
+    roll_error: int
 
 
 @dataclass
@@ -273,6 +289,120 @@ class Beamformed(BaseRecord):
     phases: np.ndarray
 
 
+class DetectionAlgorithm(Enum):
+    """ Algorithm for 7027 detection data """
+    G1_SIMPLE = 0
+    G1_BLENDFILT = 1
+    G2 = 2
+    G3 = 3
+    IF1 = 4
+    PS1 = 5
+    HS1 = 6
+    HS2 = 7
+
+
+class UncertaintyMethod(Enum):
+    """ Method used for 7027 detection """
+    NOT_CALCULATED = 0
+    ROB_HARE = 1
+    IFREMER = 2
+
+
+@dataclass
+class DetectionFlags:
+    """
+    Represents the flags of a single 7027 Detection.
+    Corresponds to the "Quality" and the "Flags" field.
+    """
+    intensity_based_detection : bool
+    phase_based_detection : bool
+    detection_priority : int
+    used_in_snippet : bool
+    signal_clipping : bool
+
+    @classmethod
+    def from_flags_int(cls, flags):
+        return cls(
+            intensity_based_detection=bool(flags & 0b1),
+            phase_based_detection=bool(flags & 0b10),
+            detection_priority=(flags & (0b1111 << 9)) >> 9,
+            used_in_snippet=not bool(flags & (0b1 << 14)),
+            signal_clipping=bool(flags & (0b1 << 15))
+        )
+
+
+@dataclass
+class DetectionQuality:
+    """ Parameters for the quality of a 7027 detection """
+    brightness_filter_passed : bool
+    collinearity_filter_passed : bool
+
+
+@dataclass
+class RawDetectionData(BaseRecord):
+    """
+    Record 7027
+    Contains seabed detections for bathymetry data.
+    """
+
+    record_type: int = field(default=7027, init=False)
+
+    sonar_id : int
+    ping_number : int
+    multi_ping_sequence : int
+    detection_count : int
+    data_field_size : int
+    detection_algorithm : DetectionAlgorithm
+    _flags : int # Use helper properties to access individual flags of this field
+    sampling_rate : float
+    tx_angle : float
+    applied_roll : float
+
+    # Record data. Older files may not have all columns available.
+    detections: np.ndarray
+
+    @property
+    def uncertainty_method(self) -> UncertaintyMethod:
+        """ Parse flags to get uncertainty method """
+        return UncertaintyMethod(self._flags & 0b111) # Extract lower 3 bits
+
+    @property
+    def multi_detection_enabled(self) -> bool:
+        """ Multi detection extracted from flags field """
+        return bool(self._flags & 0b1000)
+
+    @property
+    def has_snippets_detection_point(self) -> bool:
+        """ snippet detecion flag extracted from flags field """
+        return bool(self._flags & 0b100000)
+
+    @property
+    def has_clipping(self) -> bool:
+        """ Clipping flag extracted from flags field """
+        return bool(self._flags & 0b1000000)
+
+    @staticmethod
+    def parse_detection_flags(single_detection) -> Tuple[DetectionFlags, Optional[DetectionQuality]]:
+        """
+        Parse the "flags" and "quality" field of a single bottom detection.
+        Usually the argument would be a row from the "detections" field of this class
+        """
+        flags = single_detection["flags"]
+        quality_field = single_detection["quality"]
+        quality_type = flags & (0b111111100)
+        if quality_type == 0:
+            quality = None
+        elif quality_type == 0b100:
+            quality = DetectionQuality(
+                brightness_filter_passed=bool(quality_field & 0b1),
+                collinearity_filter_passed=bool(quality_field & 0b10),
+            )
+        else:
+            raise NotImplementedError(f"Detection Quality type {quality_type} is unknown")
+
+        return DetectionFlags.from_flags_int(flags), quality
+
+
 class SnippetControlFlag(Enum):
     """ Flag for 7028 Snippet data """
 
@@ -286,7 +416,7 @@ class SnippetControlFlag(Enum):
 class SnippetData(BaseRecord):
     """
     Record 7028
-    Contains seabed detections for bathymetry data
+    Contains seabed detections for bathymetry data with local amplitude data.
     """
 
     record_type: int = field(default=7028, init=False)
