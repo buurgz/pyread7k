@@ -364,22 +364,22 @@ class RawDetectionData(BaseRecord):
     @property
     def uncertainty_method(self) -> UncertaintyMethod:
         """ Parse flags to get uncertainty method """
-        return UncertaintyMethod(self._flags & 0b111) # Extract lower 3 bits
+        return UncertaintyMethod(self._flags & 0b1111) # Extract lower 4 bits
 
     @property
     def multi_detection_enabled(self) -> bool:
         """ Multi detection extracted from flags field """
-        return bool(self._flags & 0b1000)
+        return bool(self._flags & (0b1 << 4))
 
     @property
     def has_snippets_detection_point(self) -> bool:
         """ snippet detecion flag extracted from flags field """
-        return bool(self._flags & 0b100000)
+        return bool(self._flags & (0b1 << 6))
 
     @property
     def has_clipping(self) -> bool:
         """ Clipping flag extracted from flags field """
-        return bool(self._flags & 0b1000000)
+        return bool(self._flags & (0b1 << 7))
 
     @staticmethod
     def parse_detection_flags(single_detection) -> Tuple[DetectionFlags, Optional[DetectionQuality]]:
