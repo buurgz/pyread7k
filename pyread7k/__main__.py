@@ -1,7 +1,8 @@
-import click
 import os
 import pathlib
+
 import boto3
+import click
 from dotenv import find_dotenv, load_dotenv, set_key
 
 _BUCKET = "tdy-marine.example-7k"
