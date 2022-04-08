@@ -28,7 +28,7 @@ from typing import (
     Sequence,
     Tuple,
     Union,
-    cast
+    cast,
 )
 
 import geopy
@@ -58,7 +58,7 @@ class CatalogIssueHandling(Enum):
     catalog with an initial linear read.
 
     The second is to handle corrupt file catalogs but warn the user
-    that the file catalog is corrupt. 
+    that the file catalog is corrupt.
 
     The third is to raise if the file catalog is missing or corrupt
 
@@ -99,12 +99,8 @@ class S7KReader(metaclass=ABCMeta):
         except _datarecord.CorruptFileCatalog as exc:
             if self._catalog_issue_handling == CatalogIssueHandling.RAISE:
                 raise exc
-            elif (
-                self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN
-            ):
-                logger.warning(
-                    "File catalog was corrupt but a new one was generated."
-                )
+            elif self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN:
+                logger.warning("File catalog was corrupt but a new one was generated.")
             filecatalog = self._build_file_catalog()
         except Exception as exc:
             raise exc
@@ -298,7 +294,6 @@ class S7KFileReader(S7KReader):
         return self._catalog_issue_handling
 
 
-
 class Ping:
     """
     A sound ping from a sonar, with associated data about settings and conditions.
@@ -333,6 +328,11 @@ class Ping:
     def configuration(self) -> records.Configuration:
         """Return the 7001 record, which is shared for all pings in a file"""
         return self._reader.configuration
+
+    @property
+    def remote_control_sonar_settings(self) -> records.RemoteControlSonarSettings:
+        """Return the 7503 record, which is shared for all pings in a file"""
+        return cast(records.RemoteControlSonarSettings, self._read_record(7503))
 
     @cached_property
     def position_set(self) -> List[records.Position]:
@@ -438,7 +438,14 @@ class Ping:
         Clears all memory-heavy properties.
         Retains offsets for easy reloading.
         """
-        for key in "beamformed", "tvg", "beam_geometry", "raw_iq", "snippets", "raw_detections":
+        for key in (
+            "beamformed",
+            "tvg",
+            "beam_geometry",
+            "raw_iq",
+            "snippets",
+            "raw_detections",
+        ):
             if key in self.__dict__:
                 del self.__dict__[key]
 

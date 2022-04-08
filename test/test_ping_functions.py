@@ -3,7 +3,7 @@ from dotenv import find_dotenv, load_dotenv
 from pyread7k import FileDataset, Ping, PingDataset, PingType, CatalogIssueHandling
 from pyread7k._exceptions import CorruptFileCatalog, MissingFileCatalog
 
-from .conftest import bf_filepath, does_not_raise, filedataset, corrupt_filepath
+from .conftest import bf_filepath, ci_filepath, does_not_raise, filedataset
 
 load_dotenv(find_dotenv())
 
@@ -23,21 +23,25 @@ def test_filedataaset_valid_index(filedataset: FileDataset):
 
 class TestFiledatasetFunctions:
     """Grouped FileDataset tests"""
+
     @pytest.fixture
     def dataset(self):
         return FileDataset(bf_filepath, include=PingType.BEAMFORMED)
 
-    @pytest.mark.parametrize("ping_number,default,expected,raises", [
-        (123123123, 1, int, does_not_raise()),
-        (123123123, "weird but works", str, does_not_raise()),
-        (123123123, "weird but works", int, pytest.raises(AssertionError)),
-        ("not a ping", None, int, pytest.raises(TypeError)),
-    ])
-    def test_filedataset_get_by_number_input_handling(self, ping_number, default, expected,
-                                       raises, dataset):
+    @pytest.mark.parametrize(
+        "ping_number,default,expected,raises",
+        [
+            (123123123, 1, int, does_not_raise()),
+            (123123123, "weird but works", str, does_not_raise()),
+            (123123123, "weird but works", int, pytest.raises(AssertionError)),
+            ("not a ping", None, int, pytest.raises(TypeError)),
+        ],
+    )
+    def test_filedataset_get_by_number_input_handling(
+        self, ping_number, default, expected, raises, dataset
+    ):
         with raises:
-            assert isinstance(dataset.get_by_number(ping_number, default),
-                              expected)
+            assert isinstance(dataset.get_by_number(ping_number, default), expected)
 
     def test_filedataset_get_by_number(self, dataset):
         ping_numbers = dataset.ping_numbers
@@ -49,12 +53,14 @@ class TestFiledatasetFunctions:
             ping_number = int(p.sonar_settings.ping_number)
             assert isinstance(dataset.index_of(ping_number), int)
 
-    @pytest.mark.parametrize("issue_handling, raises", [
-        (CatalogIssueHandling.RAISE, pytest.raises(CorruptFileCatalog)),
-        (CatalogIssueHandling.HANDLE_CORRUPT, does_not_raise()),
-        (CatalogIssueHandling.HANDLE_BUT_WARN, does_not_raise())
-    ])
+    @pytest.mark.parametrize(
+        "issue_handling, raises",
+        [
+            (CatalogIssueHandling.RAISE, pytest.raises(CorruptFileCatalog)),
+            (CatalogIssueHandling.HANDLE_CORRUPT, does_not_raise()),
+            (CatalogIssueHandling.HANDLE_BUT_WARN, does_not_raise()),
+        ],
+    )
     def test_filedataset_filecatalog_handling(self, issue_handling, raises):
         with raises:
-            FileDataset(corrupt_filepath, catalog_issue_handling=issue_handling)
-
+            FileDataset(ci_filepath, catalog_issue_handling=issue_handling)

@@ -51,6 +51,7 @@ def parse_7k_timestamp(bs: bytes) -> datetime:
     )
     return t
 
+
 map_size_to_fmt = dict(
     (
         (elemT.c8, ("c", "B", 1)),
@@ -66,6 +67,7 @@ map_size_to_fmt = dict(
         (elemT.f64, ("d", "f8", 8)),
     )
 )
+
 
 class DataBlock(metaclass=abc.ABCMeta):
     """

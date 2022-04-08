@@ -1,24 +1,25 @@
 from io import SEEK_CUR, BytesIO
-from typing import List, Generator
 from pathlib import Path
+from typing import Generator, List
+
 from . import DRFBlock, _datarecord
 
 
 def S7KRecordReader(filename: str, records_to_read: List[int] = []) -> Generator:
     """Linearly parse s7k files.
-    The S7KRecordReader is a generator which linearly goes through the s7k 
+    The S7KRecordReader is a generator which linearly goes through the s7k
     file provided in the input argument and returns one record at a time.
     For records that haven't been implemented yet, it will return
     an UnsupportedRecord, which will just include the data record frame.
 
     Args:
         filename (str): Name of the file to read
-        records_to_read (List[int]): List of records to parse. 
+        records_to_read (List[int]): List of records to parse.
             Default is the empty list representing all.
 
     Returns:
         A datarecord or unsupported record
-    
+
     """
 
     # Ensure that the provided filepath is a string
@@ -47,11 +48,13 @@ def S7KRecordReader(filename: str, records_to_read: List[int] = []) -> Generator
                 # This way we can handle the read linearly
                 raw_bytes = fhandle.read(drf.size)
 
-                # Because the DataRecord read functionality assumes that we are 
+                # Because the DataRecord read functionality assumes that we are
                 # reading from the start of the record, we'll prepend the raw
                 # bytes with the size of the data record frame
                 record_content_bytes = BytesIO(DRF_START_SIZED_DUMMY + raw_bytes)
-                record = _datarecord.record(drf.record_type_id).read(record_content_bytes, drf)
+                record = _datarecord.record(drf.record_type_id).read(
+                    record_content_bytes, drf
+                )
                 if len(raw_bytes) < drf.size:
                     # If the size of the data record frame is greater than the size
                     # of the raw bytes it means that there is no more data, indicating
