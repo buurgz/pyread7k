@@ -85,8 +85,10 @@ class S7KReader(metaclass=ABCMeta):
     @cached_property
     def file_header(self) -> records.FileHeader:
         """Return the file header record for this reader"""
-        fileheader = cast(records.FileHeader, self._read_record(7200, 0))
-        return fileheader
+        # This is the only record which cannot use self._read_record since we do not
+        # know size in advance
+        file_header = _datarecord.record(7200).read(self._get_stream_for_read(0))
+        return cast(records.FileHeader, file_header)
 
     @cached_property
     def file_catalog(self) -> records.FileCatalog:
@@ -96,7 +98,8 @@ class S7KReader(metaclass=ABCMeta):
                 raise _datarecord.CorruptFileCatalog
             filecatalog = cast(
                 records.FileCatalog,
-                self._read_record(7300, self.file_header.catalog_offset),
+                self._read_record(7300, self.file_header.catalog_offset,
+                                  self.file_header.catalog_size),
             )
         except _datarecord.CorruptFileCatalog as exc:
             if self._catalog_issue_handling == CatalogIssueHandling.RAISE:
@@ -158,7 +161,7 @@ class S7KReader(metaclass=ABCMeta):
         offset_start and offset_end.
         """
         offset = self.get_first_offset(record_type, offset_start, offset_end)
-        return self._read_record(record_type, offset[0], offset[1]) if offset is not None else None
+        return self._read_record(record_type, *offset) if offset is not None else None
 
     def read_records_during_ping(
         self,
@@ -217,14 +220,10 @@ class S7KReader(metaclass=ABCMeta):
         backward_records.extend(forward_records)
         return backward_records
 
-    def _read_record(self, record_type: int, offset: int, size: Optional[int]=None) -> records.BaseRecord:
+    def _read_record(self, record_type: int, offset: int, size: int) -> records.BaseRecord:
         """Read a record of record_type at the given offset"""
-        if size is not None:
-            # If we have size, we can avoid some file operations by reading
-            # into buffer before parsing record.
-            bytes_wrapper = BytesIO(self._get_stream_for_read(offset).read(size))
-            return _datarecord.record(record_type).read(bytes_wrapper)
-        return _datarecord.record(record_type).read(self._get_stream_for_read(offset))
+        bytes_wrapper = BytesIO(self._get_stream_for_read(offset).read(size))
+        return _datarecord.record(record_type).read(bytes_wrapper)
 
     def _iter_offset_records(
         self, record_type: int
