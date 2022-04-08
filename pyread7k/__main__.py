@@ -1,9 +1,12 @@
+import logging
 import os
 import pathlib
 
-import boto3
 import click
+import requests
 from dotenv import find_dotenv, load_dotenv, set_key
+
+logger = logging.getLogger(__name__)
 
 _BUCKET = "tdy-marine.example-7k"
 _DATADIR = pathlib.Path(".") / "data"
@@ -21,19 +24,27 @@ def main():
 def getdata(obj, output, overwrite=False):
     p = pathlib.Path(output)
     if p.exists() and not overwrite:
+        logger.info(f"{output} already exists.")
         return None
     elif not p.parent.exists():
         p.parent.mkdir(parents=True, exist_ok=False)
 
-    s3 = boto3.client("s3")
-    s3.download_file(_BUCKET, obj, str(p))
+    logger.info(f"{output} did not exist. Downloading it from public S3 bucket.")
+
+    # s3 = boto3.client("s3")
+    # s3.download_file(_BUCKET, obj, str(p))
+    with open(output, "wb") as fhandle:
+        with requests.get(f"http://{_BUCKET}.s3.amazonaws.com/{obj}", stream=True) as r:
+            fhandle.write(r.content)
 
 
 @main.command()
 def devsetup():
     """Instatiate the """
     root = pathlib.Path(__file__).parent.parent
+
     if len(list(root.glob(".env"))) == 0:
+        logger.info("No .env found. Creating one.")
         # Create the .env
         with (root / ".env").open("w") as _:
             pass
@@ -55,6 +66,10 @@ def devsetup():
             filepath = _DATADIR / filename
             getdata(filename, filepath)
             set_key(str(root / ".env"), envkey, str(filepath.absolute()))
+
+    logger.info(
+        "Data for development and testing is now available in the data directory."
+    )
 
 
 if __name__ == "__main__":
