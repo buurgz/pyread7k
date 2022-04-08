@@ -484,7 +484,6 @@ class FileHeader(BaseRecord):
 class FileCatalog(BaseRecord):
     """Record 7300.
     7k file catalog record, placed at the end of log files.
-    record_type : int = field(default=7300, init=False)
 
     The file catalog contains one entry for each record in the log file,
     including the 7200 file header record, but excluding the 7300 file catalog

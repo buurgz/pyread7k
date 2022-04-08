@@ -11,11 +11,13 @@ Expected order of records for a ping:
 """
 import bisect
 import logging
+import os
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod, abstractproperty
 from datetime import datetime, timedelta
 from enum import Enum
+from io import BytesIO
 from itertools import chain
 from pathlib import Path
 from typing import (
@@ -119,14 +121,14 @@ class S7KReader(metaclass=ABCMeta):
 
     def iter_pings(self, include: PingType = PingType.ANY) -> Iterator["Ping"]:
         """Iterate over Pings. if include argument is not ANY, filter pings by type"""
-        offsets_records = chain(self._iter_offset_records(7000), [None])
+        settings_records = chain(self._iter_offset_records(7000), [None])
         pings = (
             Ping(
                 cast(Tuple[int, records.SonarSettings], offset_record),
                 cast(Optional[Tuple[int, records.SonarSettings]], next_offset_record),
                 reader=self,
             )
-            for offset_record, next_offset_record in window(offsets_records, 2)
+            for offset_record, next_offset_record in window(settings_records, 2)
         )
         if include == PingType.ANY:
             return pings
@@ -138,14 +140,15 @@ class S7KReader(metaclass=ABCMeta):
 
     def get_first_offset(
         self, record_type: int, offset_start: int, offset_end: int
-    ) -> Optional[int]:
+    ) -> Optional[Tuple[int, int]]:
         """
         Get the offset of the first record of type record_type which has a
         file offset between offset_start and offset_end.
         """
         offsets = self._get_offsets(record_type)
-        i = bisect.bisect_right(offsets, offset_start)
-        return offsets[i] if i < len(offsets) and offsets[i] < offset_end else None
+        i = bisect.bisect_right(offsets, (offset_start, 0))
+        if i < len(offsets) and offsets[i][0] < offset_end:
+            return offsets[i]
 
     def read_first_record(
         self, record_type: int, offset_start: int, offset_end: int
@@ -155,7 +158,7 @@ class S7KReader(metaclass=ABCMeta):
         offset_start and offset_end.
         """
         offset = self.get_first_offset(record_type, offset_start, offset_end)
-        return self._read_record(record_type, offset) if offset is not None else None
+        return self._read_record(record_type, offset[0], offset[1]) if offset is not None else None
 
     def read_records_during_ping(
         self,
@@ -174,15 +177,14 @@ class S7KReader(metaclass=ABCMeta):
         #
         # Records of different types are not guaranteed to be chronological, so
         # we cannot know a specific record interval to search.
-        read_record = self._read_record
         offsets = self._get_offsets(record_type)
-        initial_index = bisect.bisect_left(offsets, offset_hint)
+        initial_index = bisect.bisect_left(offsets, (offset_hint, 0))
 
         # Search forward in file
         forward_records = []
         searching_backward = True
         for index in range(initial_index, len(offsets)):
-            next_record = read_record(record_type, offsets[index])
+            next_record = self._read_record(record_type, *offsets[index])
             next_record_time = next_record.frame.time
             if next_record_time > ping_end:
                 # Reached upper end of interval
@@ -199,7 +201,7 @@ class S7KReader(metaclass=ABCMeta):
         # Search backward in file
         backward_records = []
         for index in range(initial_index - 1, -1, -1):
-            next_record = read_record(record_type, offsets[index])
+            next_record = self._read_record(record_type, *offsets[index])
             next_record_time = next_record.frame.time
             if next_record_time < ping_start:
                 # Reached lower end of interval
@@ -215,35 +217,36 @@ class S7KReader(metaclass=ABCMeta):
         backward_records.extend(forward_records)
         return backward_records
 
-    def _read_record(self, record_type: int, offset: int) -> records.BaseRecord:
+    def _read_record(self, record_type: int, offset: int, size: Optional[int]=None) -> records.BaseRecord:
         """Read a record of record_type at the given offset"""
+        if size is not None:
+            # If we have size, we can avoid some file operations by reading
+            # into buffer before parsing record.
+            bytes_wrapper = BytesIO(self._get_stream_for_read(offset).read(size))
+            return _datarecord.record(record_type).read(bytes_wrapper)
         return _datarecord.record(record_type).read(self._get_stream_for_read(offset))
 
     def _iter_offset_records(
         self, record_type: int
     ) -> Iterator[Tuple[int, records.BaseRecord]]:
         """Generate all the (offset, record) tuples for the given record type"""
-        read_record = _datarecord.record(record_type).read
-        get_stream = self._get_stream_for_read
-        for offset in self._get_offsets(record_type):
-            yield offset, read_record(get_stream(offset))
+        for offset, size in self._get_offsets(record_type):
+            yield offset, self._read_record(record_type, offset, size)
 
-    def _get_offsets(self, record_type: int) -> Sequence[int]:
-        """Return all the offsets for the given record type"""
+    def _get_offsets(self, record_type: int) -> Sequence[Tuple[int, int]]:
+        """
+        Return all (offset, size) tuples for the given record type.
+        Does not handle 7300, since it is not in the file catalog.
+        """
         try:
             return self.__cached_offsets[record_type]
         except (AttributeError, KeyError) as ex:
-            offsets: List[int] = []
-            if record_type != 7300:
-                catalog = self.file_catalog
-                offsets.extend(
-                    offset
-                    for offset, rt in zip(catalog.offsets, catalog.record_types)
-                    if rt == record_type
-                )
-            else:
-                # the file catalog does not contain an entry for the 7300 record
-                offsets.append(self.file_header.catalog_offset)
+            offsets = [
+                (offset, size)
+                for offset, rt, size in zip(self.file_catalog.offsets,
+                    self.file_catalog.record_types, self.file_catalog.sizes)
+                if rt == record_type
+            ]
 
             if isinstance(ex, AttributeError):
                 self.__cached_offsets: Dict[int, Sequence[int]] = {}
@@ -263,11 +266,14 @@ class S7KFileReader(S7KReader):
 
     def __init__(
         self,
-        filename: str,
+        file: Union[str, bytes, os.PathLike, BinaryIO],
         catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.RAISE,
     ):
-        self._filename = filename
-        self._fhandle = open(self._filename, "rb", 0)
+        if isinstance(file, str) or isinstance(file, bytes) or isinstance(file, os.PathLike):
+            self._fhandle = open(file, "rb", 0)
+        else:
+            self._fhandle = file
+            file.seek(0)
         self._catalog_issue_handling = catalog_issue_handling
 
     def _get_stream_for_read(self, offset: int) -> BinaryIO:
@@ -466,14 +472,14 @@ class FileDataset:
     Provides random access into pings in a file with minimal overhead.
 
     Args:
-        filename (str): Path to the s7k file
+        filename: Path to the s7k file, OR open file in binary mode, preferably with 0 buffering.
         include (PingType): Type of ping data we want to access
 
     """
 
     def __init__(
         self,
-        filename: str,
+        file: Union[str, bytes, os.PathLike, BinaryIO],
         include: PingType = PingType.ANY,
         catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.RAISE,
     ):
@@ -481,7 +487,7 @@ class FileDataset:
         if include argument is not ANY, pings will be filtered.
         """
         self.pings = list(
-            S7KFileReader(filename, catalog_issue_handling).iter_pings(include)
+            S7KFileReader(file, catalog_issue_handling).iter_pings(include)
         )
         self._ping_numbers = [p.ping_number for p in self.pings]
 
