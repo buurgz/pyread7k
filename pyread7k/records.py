@@ -580,7 +580,7 @@ class RemoteControlSonarSettings(BaseRecord):
     """ The tilt of the sonar around the y axis (in the vessels coordinate system) """
 
     head_tilt_z: float
-    """ The tilt of the sonar around the y axis (in the vessels coordinate system) """
+    """ The tilt of the sonar around the z axis (in the vessels coordinate system) """
 
     ping_state: int
     beam_spacing_mode: int
@@ -590,7 +590,7 @@ class RemoteControlSonarSettings(BaseRecord):
     trigger_out_width: float
     trigger_out_offset: float
     xx_series_perojector_selection: int
-    xx_series_altnernate_gain: float
+    xx_series_alternate_gain: float
     vernier_filter: int
     custom_beams: int
     coverage_angle: float
