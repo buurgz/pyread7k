@@ -3,12 +3,13 @@
 # import math
 import datetime
 import os
+import typing
 from collections.abc import Iterable
 
 import psutil
-from pyread7k.records import DetectionFlags, RemoteControlSonarSettings
 import pytest
 from numpy.testing import assert_almost_equal
+
 from pyread7k import (
     ConcatDataset,
     FileDataset,
@@ -17,7 +18,7 @@ from pyread7k import (
     PingType,
     S7KRecordReader,
 )
-
+from pyread7k.records import DetectionFlags, RemoteControlSonarSettings
 
 from .conftest import bf_filepath, does_not_raise, filedataset
 
@@ -213,7 +214,14 @@ class TestRecord7503:
         for field in RemoteControlSonarSettings.__annotations__.keys():
             assert hasattr(ping.remote_control_sonar_settings, field)
 
-    def test_record_attributes_have_data(self, filedataset):
+    def test_record_attributes_data_have_correct_data_type(self, filedataset):
         ping = filedataset[0]
         for field in RemoteControlSonarSettings.__annotations__.keys():
-            assert getattr(ping.remote_control_sonar_settings, field, None) is not None
+            # Get the attribute value, and compare it to the
+            # types of the dataclass fields
+            field_type = typing.get_type_hints(RemoteControlSonarSettings)[field]
+            attr = getattr(ping.remote_control_sonar_settings, field, None)
+            if typing.get_origin(field_type) is None:
+                assert isinstance(attr, field_type)
+            else:
+                assert isinstance(attr, typing.get_args(field_type))

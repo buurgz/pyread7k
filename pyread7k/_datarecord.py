@@ -23,7 +23,6 @@ from ._exceptions import (
     CorruptFileHeader,
     CorruptRecordDataError,
     MissingFileCatalog,
-    UnsupportedRecordError,
 )
 
 
@@ -87,6 +86,7 @@ class DataRecord(metaclass=abc.ABCMeta):
     These are NOT the classes returned to the library user, they are only readers.
     """
 
+    _block_rth: DataBlock
     _block_drf = DRFBlock()
     _block_checksum = DataBlock((("checksum", ("u32",)),))
     implemented: Optional[Dict[int, Any]] = None
@@ -110,6 +110,12 @@ class DataRecord(metaclass=abc.ABCMeta):
             source.seek(4, io.SEEK_CUR)  # to sync pattern
             source.seek(drf.offset, io.SEEK_CUR)
 
+            # If we are not parsing an implemented record
+            # then we should just read whatever the drf says.
+            # Otherwise we should check whether the size
+            # from the drf and the size of the defined block
+            # match. If they don't then we remove fields
+            # from the elems until they do.
             parsed_data = self._read(source, drf, start_offset)
 
             checksum = self._block_checksum.read(source)["checksum"]
@@ -757,6 +763,25 @@ class _DataRecord1018(DataRecord):
         return records.Velocity(**rth, frame=drf)
 
 
+class _DataRecord7022(DataRecord):
+    """ Sonar Source Version """
+
+    _record_type_id = 7022
+    _block_rth = DataBlock((elemD_("sonar_source_version", elemT.c8, 32),))
+
+    def _read(
+        self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
+    ):
+        rth = self._block_rth.read(source)
+        _bytes_to_str(
+            rth,
+            [
+                "sonar_source_version",
+            ],
+        )
+        return records.SonarSourceVersion(**rth, frame=drf)
+
+
 class _UnsupportedRecord(DataRecord):
     """ Unsupported """
 
@@ -772,97 +797,99 @@ class _UnsupportedRecord(DataRecord):
         )
 
 
-def record(type_id: int) -> DataRecord:
-    """Get a s7k record reader by record id """
-
-    return DataRecord.instance(type_id)
-
-
 class _DataRecord7503(DataRecord):
 
     """Remote Control Sonar Settings"""
 
     _record_type_id = 7503
 
-    _block_rth = DataBlock(
-        (
-            elemD_("sonar_id", elemT.u64),
-            elemD_("ping_number", elemT.u32),
-            elemD_("frequency", elemT.f32),
-            elemD_("sample_rate", elemT.f32),
-            elemD_("receiver_bandwidth", elemT.f32),
-            elemD_("tx_pulse_width", elemT.f32),
-            elemD_("tx_pulse_type_id", elemT.u32),
-            elemD_("tx_pulse_envelope_id", elemT.u32),
-            elemD_("tx_pulse_envelope_parameter", elemT.f32),
-            elemD_("tx_pulse_mode", elemT.u16),
-            elemD_(None, elemT.u16),
-            elemD_("max_ping_rate", elemT.f32),
-            elemD_("ping_period", elemT.f32),
-            elemD_("range_selection", elemT.f32),
-            elemD_("power_selection", elemT.f32),
-            elemD_("gain_selection", elemT.f32),
-            elemD_("control_flags", elemT.u32),
-            elemD_("projector_id", elemT.u32),
-            elemD_("projector_beam_angle_vertical", elemT.f32),
-            elemD_("projector_beam_angle_horizontal", elemT.f32),
-            elemD_("projector_beam_width_vertical", elemT.f32),
-            elemD_("projector_beam_width_horizontal", elemT.f32),
-            elemD_("projector_beam_focal_point", elemT.f32),
-            elemD_("projector_beam_weighting_window_type", elemT.u32),
-            elemD_("projector_beam_weighting_window_parameter", elemT.f32),
-            elemD_("transmit_flags", elemT.u32),
-            elemD_("hydrophone_id", elemT.u32),
-            elemD_("receive_beam_weighting_window", elemT.u32),
-            elemD_("receive_beam_weighting_parameter", elemT.f32),
-            elemD_("receive_flags", elemT.u32),
-            elemD_("bottom_detection_filter_min_range", elemT.f32),
-            elemD_("bottom_detection_filter_max_range", elemT.f32),
-            elemD_("bottom_detection_filter_min_depth", elemT.f32),
-            elemD_("bottom_detection_filter_max_depth", elemT.f32),
-            elemD_("absorption", elemT.f32),
-            elemD_("sound_velocity", elemT.f32),
-            elemD_("spreading", elemT.f32),
-            elemD_("vernier_operation_mode", elemT.u8),
-            elemD_("automatic_filter_window", elemT.u8),
-            elemD_("automatic_filter_window", elemT.u8),
-            elemD_("tx_array_position_offset_x", elemT.f32),
-            elemD_("tx_array_position_offset_y", elemT.f32),
-            elemD_("tx_array_position_offset_z", elemT.f32),
-            elemD_("head_tilt_x", elemT.f32),
-            elemD_("head_tilt_y", elemT.f32),
-            elemD_("head_tilt_z", elemT.f32),
-            elemD_("ping_state", elemT.u32),
-            elemD_("beam_spacing_mode", elemT.u16),
-            elemD_("sonar_source_mode", elemT.u16),
-            elemD_("adaptive_gate_bottom_filter_min", elemT.f32),
-            elemD_("adaptive_gate_bottom_filter_max", elemT.f32),
-            elemD_("trigger_out_width", elemT.f64),
-            elemD_("trigger_out_offset", elemT.f64),
-            elemD_("xx_series_perojector_selection", elemT.u16),
-            elemD_(None, elemT.u32, 2),
-            elemD_("xx_series_altnernate_gain", elemT.f32),
-            elemD_("vernier_filter", elemT.u8),
-            elemD_(None, elemT.u8),
-            elemD_("custom_beams", elemT.u16),
-            elemD_("coverage_angle", elemT.f32),
-            elemD_("coverage_mode", elemT.u8),
-            elemD_("quality_filter_flags", elemT.u8),
-            elemD_("horizontal_receiver_beam_steering_angle", elemT.f32),
-            elemD_("flexmode_sector_coverage", elemT.f32),
-            elemD_("flexmode_sector_steering", elemT.f32),
-            elemD_("constant_spacing", elemT.f32),
-            elemD_("beam_mode_selection", elemT.u16),
-            elemD_("depth_gate_tilt", elemT.f32),
-            elemD_("applied_frequency", elemT.f32),
-            elemD_("element_number", elemT.u32),
-            elemD_("max_image_height", elemT.u32),
-            elemD_("bytes_per_pixel", elemT.u32),
-        )
+    _fields = (
+        ("sonar_id", elemT.u64),
+        ("ping_number", elemT.u32),
+        ("frequency", elemT.f32),
+        ("sample_rate", elemT.f32),
+        ("receiver_bandwidth", elemT.f32),
+        ("tx_pulse_width", elemT.f32),
+        ("tx_pulse_type_id", elemT.u32),
+        ("tx_pulse_envelope_id", elemT.u32),
+        ("tx_pulse_envelope_parameter", elemT.f32),
+        ("tx_pulse_mode", elemT.u16),
+        (None, elemT.u16),
+        ("max_ping_rate", elemT.f32),
+        ("ping_period", elemT.f32),
+        ("range_selection", elemT.f32),
+        ("power_selection", elemT.f32),
+        ("gain_selection", elemT.f32),
+        ("control_flags", elemT.u32),
+        ("projector_id", elemT.u32),
+        ("projector_beam_angle_vertical", elemT.f32),
+        ("projector_beam_angle_horizontal", elemT.f32),
+        ("projector_beam_width_vertical", elemT.f32),
+        ("projector_beam_width_horizontal", elemT.f32),
+        ("projector_beam_focal_point", elemT.f32),
+        ("projector_beam_weighting_window_type", elemT.u32),
+        ("projector_beam_weighting_window_parameter", elemT.f32),
+        ("transmit_flags", elemT.u32),
+        ("hydrophone_id", elemT.u32),
+        ("receive_beam_weighting_window", elemT.u32),
+        ("receive_beam_weighting_parameter", elemT.f32),
+        ("receive_flags", elemT.u32),
+        ("bottom_detection_filter_min_range", elemT.f32),
+        ("bottom_detection_filter_max_range", elemT.f32),
+        ("bottom_detection_filter_min_depth", elemT.f32),
+        ("bottom_detection_filter_max_depth", elemT.f32),
+        ("absorption", elemT.f32),
+        ("sound_velocity", elemT.f32),
+        ("spreading", elemT.f32),
+        ("vernier_operation_mode", elemT.u8),
+        ("automatic_filter_window", elemT.u8),
+        ("tx_array_position_offset_x", elemT.f32),
+        ("tx_array_position_offset_y", elemT.f32),
+        ("tx_array_position_offset_z", elemT.f32),
+        ("head_tilt_x", elemT.f32),
+        ("head_tilt_y", elemT.f32),
+        ("head_tilt_z", elemT.f32),
+        ("ping_state", elemT.u32),
+        ("beam_spacing_mode", elemT.u16),
+        ("sonar_source_mode", elemT.u16),
+        ("adaptive_gate_bottom_filter_min", elemT.f32),
+        ("adaptive_gate_bottom_filter_max", elemT.f32),
+        ("trigger_out_width", elemT.f64),
+        ("trigger_out_offset", elemT.f64),
+        ("xx_series_perojector_selection", elemT.u16),
+        (None, elemT.u32, 2),
+        ("xx_series_altnernate_gain", elemT.f32),
+        ("vernier_filter", elemT.u8),
+        (None, elemT.u8),
+        ("custom_beams", elemT.u16),
+        ("coverage_angle", elemT.f32),
+        ("coverage_mode", elemT.u8),
+        ("quality_filter_flags", elemT.u8),
+        ("horizontal_receiver_beam_steering_angle", elemT.f32),
+        ("flexmode_sector_coverage", elemT.f32),
+        ("flexmode_sector_steering", elemT.f32),
+        ("constant_spacing", elemT.f32),
+        ("beam_mode_selection", elemT.u16),
+        ("depth_gate_tilt", elemT.f32),
+        ("applied_frequency", elemT.f32),
+        ("element_number", elemT.u32),
+        ("max_image_height", elemT.u32),
+        ("bytes_per_pixel", elemT.u32),
     )
+    _block_rth = _datablock_elemd(*_fields)
 
     def _read(
         self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
     ):
+        rth_size = self._block_rth.size
+        source_rth_size = drf.size - self._block_drf.size - self._block_checksum.size
+        if rth_size != source_rth_size:
+            self._block_rth = _record_data_block(self._fields, source_rth_size)
+
         rth = self._block_rth.read(source)
         return records.RemoteControlSonarSettings(**rth, frame=drf)
+
+
+def record(type_id: int) -> DataRecord:
+    """Get a s7k record reader by record id """
+    return DataRecord.instance(type_id)

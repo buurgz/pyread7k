@@ -9,10 +9,6 @@ repos:
       - id: skjold
   - repo: local
     hooks:
-      - id: isort
-        name: isort
-        entry: poetry run isort
-        language: system
       - id: black
         name: black
         entry: poetry run black

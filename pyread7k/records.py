@@ -290,6 +290,17 @@ class Beamformed(BaseRecord):
     phases: np.ndarray
 
 
+@dataclass
+class SonarSourceVersion(BaseRecord):
+    """Record 7022.
+    Contains source version of the sonar
+    """
+
+    record_type: int = field(default=7022, init=False)
+
+    sonar_source_version: str
+
+
 class DetectionAlgorithm(Enum):
     """ Algorithm for 7027 detection data """
 
@@ -593,5 +604,5 @@ class RemoteControlSonarSettings(BaseRecord):
     depth_gate_tilt: float
     applied_frequency: float
     element_number: int
-    max_image_height: int
-    bytes_per_pixel: int
+    max_image_height: Optional[int] = None
+    bytes_per_pixel: Optional[int] = None
