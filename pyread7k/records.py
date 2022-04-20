@@ -589,7 +589,7 @@ class RemoteControlSonarSettings(BaseRecord):
     adaptive_gate_bottom_filter_max: float
     trigger_out_width: float
     trigger_out_offset: float
-    xx_series_perojector_selection: int
+    xx_series_projector_selection: int
     xx_series_alternate_gain: float
     vernier_filter: int
     custom_beams: int
