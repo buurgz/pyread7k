@@ -10,7 +10,9 @@ Welcome to Pyread7k's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   toplevel
    modules
+
 
 
 Indices and tables
