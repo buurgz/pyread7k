@@ -773,12 +773,7 @@ class _DataRecord7022(DataRecord):
         self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
     ):
         rth = self._block_rth.read(source)
-        _bytes_to_str(
-            rth,
-            [
-                "sonar_source_version",
-            ],
-        )
+        _bytes_to_str(rth, ["sonar_source_version"])
         return records.SonarSourceVersion(**rth, frame=drf)
 
 
@@ -856,9 +851,9 @@ class _DataRecord7503(DataRecord):
         ("adaptive_gate_bottom_filter_max", elemT.f32),
         ("trigger_out_width", elemT.f64),
         ("trigger_out_offset", elemT.f64),
-        ("xx_series_perojector_selection", elemT.u16),
+        ("xx_series_projector_selection", elemT.u16),
         (None, elemT.u32, 2),
-        ("xx_series_altnernate_gain", elemT.f32),
+        ("xx_series_alternate_gain", elemT.f32),
         ("vernier_filter", elemT.u8),
         (None, elemT.u8),
         ("custom_beams", elemT.u16),
@@ -884,9 +879,11 @@ class _DataRecord7503(DataRecord):
         rth_size = self._block_rth.size
         source_rth_size = drf.size - self._block_drf.size - self._block_checksum.size
         if rth_size != source_rth_size:
-            self._block_rth = _record_data_block(self._fields, source_rth_size)
+            block_rth = _record_data_block(self._fields, source_rth_size)
+        else:
+            block_rth = self._block_rth
 
-        rth = self._block_rth.read(source)
+        rth = block_rth.read(source)
         return records.RemoteControlSonarSettings(**rth, frame=drf)
 
 
