@@ -6,10 +6,16 @@ import os
 from contextlib import contextmanager
 
 import pytest
-from pyread7k import (ConcatDataset, FileDataset, FolderDataset, Ping,
-                      PingDataset, PingType)
+from pyread7k import (
+    ConcatDataset,
+    FileDataset,
+    FolderDataset,
+    Ping,
+    PingDataset,
+    PingType,
+)
 
-from .context import corrupt_filepath, bf_filepath, iq_filepath, root_dir
+from .context import ci_filepath, bf_filepath
 
 
 @pytest.fixture
@@ -24,8 +30,7 @@ def ping(dataset) -> Ping:
 
 @pytest.fixture
 def folderdataset(goodfile) -> FolderDataset:
-    return FolderDataset(os.path.dirname(goodfile),
-                         include=PingType.BEAMFORMED)
+    return FolderDataset(os.path.dirname(goodfile), include=PingType.BEAMFORMED)
 
 
 @contextmanager

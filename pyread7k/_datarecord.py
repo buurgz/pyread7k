@@ -10,13 +10,19 @@ from xml.etree import ElementTree as ET
 import numpy as np
 
 from . import records
-from ._datablock import DataBlock, DRFBlock, elemD_, elemT, parse_7k_timestamp, map_size_to_fmt
+from ._datablock import (
+    DataBlock,
+    DRFBlock,
+    elemD_,
+    elemT,
+    map_size_to_fmt,
+    parse_7k_timestamp,
+)
 from ._exceptions import (
     CorruptFileCatalog,
     CorruptFileHeader,
     CorruptRecordDataError,
     MissingFileCatalog,
-    UnsupportedRecordError,
 )
 
 
@@ -54,7 +60,7 @@ def _record_data_block(fields, data_field_size):
         _, _, elem_size = map_size_to_fmt[elem_type]
 
         field_size_accumulator += count * elem_size
-        
+
         if field_size_accumulator >= data_field_size:
             break
     if field_size_accumulator > data_field_size:
@@ -62,7 +68,7 @@ def _record_data_block(fields, data_field_size):
         raise CorruptRecordDataError(
             "Record data field lengths could not be matched to data field size"
         )
-    available_fields = fields[:index + 1]
+    available_fields = fields[: index + 1]
     if field_size_accumulator < data_field_size:
         # There are unknown fields added since this code was written.
         # These are added as a "reserved" field so that sizes line up.
@@ -80,6 +86,7 @@ class DataRecord(metaclass=abc.ABCMeta):
     These are NOT the classes returned to the library user, they are only readers.
     """
 
+    _block_rth: DataBlock
     _block_drf = DRFBlock()
     _block_checksum = DataBlock((("checksum", ("u32",)),))
     implemented: Optional[Dict[int, Any]] = None
@@ -87,13 +94,13 @@ class DataRecord(metaclass=abc.ABCMeta):
 
     def read(self, source: io.RawIOBase, drf: Optional[records.DataRecordFrame] = None):
         """Base record reader.
-        
+
         Args:
             source (io.RawIOBase): The bytes object to read from
             drf (:obj: `records.DataRecordFrame`, optional): An optional input to minimize reads
         Returns:
             A data record
-        
+
         """
         start_offset = source.tell()
         if drf is None:
@@ -103,6 +110,12 @@ class DataRecord(metaclass=abc.ABCMeta):
             source.seek(4, io.SEEK_CUR)  # to sync pattern
             source.seek(drf.offset, io.SEEK_CUR)
 
+            # If we are not parsing an implemented record
+            # then we should just read whatever the drf says.
+            # Otherwise we should check whether the size
+            # from the drf and the size of the defined block
+            # match. If they don't then we remove fields
+            # from the elems until they do.
             parsed_data = self._read(source, drf, start_offset)
 
             checksum = self._block_checksum.read(source)["checksum"]
@@ -120,7 +133,7 @@ class DataRecord(metaclass=abc.ABCMeta):
                 raise CorruptFileHeader(
                     "Corrupt file header (record 7200) or incorrect data block!"
                 )
-            raise exc # If the error is unknown, propagate it
+            raise exc  # If the error is unknown, propagate it
         except ValueError as exc:
             raise exc
 
@@ -473,7 +486,9 @@ class _DataRecord7027(DataRecord):
         self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
     ):
         rth = self._block_rth.read(source)
-        rth["detection_algorithm"] = records.DetectionAlgorithm(rth["detection_algorithm"])
+        rth["detection_algorithm"] = records.DetectionAlgorithm(
+            rth["detection_algorithm"]
+        )
 
         # The block_rd may change based on data_field_size
         block_rd = _record_data_block(self._rd_fields, rth["data_field_size"])
@@ -747,16 +762,131 @@ class _DataRecord1018(DataRecord):
         rth = self._block_rth.read(source)
         return records.Velocity(**rth, frame=drf)
 
+
+class _DataRecord7022(DataRecord):
+    """ Sonar Source Version """
+
+    _record_type_id = 7022
+    _block_rth = DataBlock((elemD_("sonar_source_version", elemT.c8, 32),))
+
+    def _read(
+        self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
+    ):
+        rth = self._block_rth.read(source)
+        _bytes_to_str(rth, ["sonar_source_version"])
+        return records.SonarSourceVersion(**rth, frame=drf)
+
+
 class _UnsupportedRecord(DataRecord):
     """ Unsupported """
 
-    def _read(self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int):
-        record_bytes = source.read(drf.size - self._block_drf.size - self._block_checksum.size)
+    def _read(
+        self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
+    ):
+        record_bytes = source.read(
+            drf.size - self._block_drf.size - self._block_checksum.size
+        )
 
-        return records.UnsupportedRecord(frame=drf, record_type=drf.record_type_id, record_bytes=record_bytes)
+        return records.UnsupportedRecord(
+            frame=drf, record_type=drf.record_type_id, record_bytes=record_bytes
+        )
+
+
+class _DataRecord7503(DataRecord):
+
+    """Remote Control Sonar Settings"""
+
+    _record_type_id = 7503
+
+    _fields = (
+        ("sonar_id", elemT.u64),
+        ("ping_number", elemT.u32),
+        ("frequency", elemT.f32),
+        ("sample_rate", elemT.f32),
+        ("receiver_bandwidth", elemT.f32),
+        ("tx_pulse_width", elemT.f32),
+        ("tx_pulse_type_id", elemT.u32),
+        ("tx_pulse_envelope_id", elemT.u32),
+        ("tx_pulse_envelope_parameter", elemT.f32),
+        ("tx_pulse_mode", elemT.u16),
+        (None, elemT.u16),
+        ("max_ping_rate", elemT.f32),
+        ("ping_period", elemT.f32),
+        ("range_selection", elemT.f32),
+        ("power_selection", elemT.f32),
+        ("gain_selection", elemT.f32),
+        ("control_flags", elemT.u32),
+        ("projector_id", elemT.u32),
+        ("projector_beam_angle_vertical", elemT.f32),
+        ("projector_beam_angle_horizontal", elemT.f32),
+        ("projector_beam_width_vertical", elemT.f32),
+        ("projector_beam_width_horizontal", elemT.f32),
+        ("projector_beam_focal_point", elemT.f32),
+        ("projector_beam_weighting_window_type", elemT.u32),
+        ("projector_beam_weighting_window_parameter", elemT.f32),
+        ("transmit_flags", elemT.u32),
+        ("hydrophone_id", elemT.u32),
+        ("receive_beam_weighting_window", elemT.u32),
+        ("receive_beam_weighting_parameter", elemT.f32),
+        ("receive_flags", elemT.u32),
+        ("bottom_detection_filter_min_range", elemT.f32),
+        ("bottom_detection_filter_max_range", elemT.f32),
+        ("bottom_detection_filter_min_depth", elemT.f32),
+        ("bottom_detection_filter_max_depth", elemT.f32),
+        ("absorption", elemT.f32),
+        ("sound_velocity", elemT.f32),
+        ("spreading", elemT.f32),
+        ("vernier_operation_mode", elemT.u8),
+        ("automatic_filter_window", elemT.u8),
+        ("tx_array_position_offset_x", elemT.f32),
+        ("tx_array_position_offset_y", elemT.f32),
+        ("tx_array_position_offset_z", elemT.f32),
+        ("head_tilt_x", elemT.f32),
+        ("head_tilt_y", elemT.f32),
+        ("head_tilt_z", elemT.f32),
+        ("ping_state", elemT.u32),
+        ("beam_spacing_mode", elemT.u16),
+        ("sonar_source_mode", elemT.u16),
+        ("adaptive_gate_bottom_filter_min", elemT.f32),
+        ("adaptive_gate_bottom_filter_max", elemT.f32),
+        ("trigger_out_width", elemT.f64),
+        ("trigger_out_offset", elemT.f64),
+        ("xx_series_projector_selection", elemT.u16),
+        (None, elemT.u32, 2),
+        ("xx_series_alternate_gain", elemT.f32),
+        ("vernier_filter", elemT.u8),
+        (None, elemT.u8),
+        ("custom_beams", elemT.u16),
+        ("coverage_angle", elemT.f32),
+        ("coverage_mode", elemT.u8),
+        ("quality_filter_flags", elemT.u8),
+        ("horizontal_receiver_beam_steering_angle", elemT.f32),
+        ("flexmode_sector_coverage", elemT.f32),
+        ("flexmode_sector_steering", elemT.f32),
+        ("constant_spacing", elemT.f32),
+        ("beam_mode_selection", elemT.u16),
+        ("depth_gate_tilt", elemT.f32),
+        ("applied_frequency", elemT.f32),
+        ("element_number", elemT.u32),
+        ("max_image_height", elemT.u32),
+        ("bytes_per_pixel", elemT.u32),
+    )
+    _block_rth = _datablock_elemd(*_fields)
+
+    def _read(
+        self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
+    ):
+        rth_size = self._block_rth.size
+        source_rth_size = drf.size - self._block_drf.size - self._block_checksum.size
+        if rth_size != source_rth_size:
+            block_rth = _record_data_block(self._fields, source_rth_size)
+        else:
+            block_rth = self._block_rth
+
+        rth = block_rth.read(source)
+        return records.RemoteControlSonarSettings(**rth, frame=drf)
 
 
 def record(type_id: int) -> DataRecord:
     """Get a s7k record reader by record id """
-
     return DataRecord.instance(type_id)

@@ -1,9 +1,9 @@
 import collections
-from copy import copy
 import csv
 import functools
 import io
 import itertools as it
+from copy import copy
 from typing import Iterable, Iterator, Tuple, TypeVar
 
 from . import records
@@ -59,12 +59,12 @@ def read_file_catalog(source: io.RawIOBase, file_header: FileHeader) -> FileCata
 
 
 def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
-    """ Build the file catalog using linear reading of s7k file. 
+    """Build the file catalog using linear reading of s7k file.
 
     This utility function is used to construct a file catalog by reading through
     the records in the s7k file. It currently correctly handles all but:
     record_counts.
-    
+
     """
     file_catalog_data = {
         "sizes": [],
@@ -117,16 +117,16 @@ def build_file_catalog(source: io.RawIOBase) -> FileCatalog:
     # Add the size of the drf
     dummy_frame.size += DRF_BYTE_SIZE
     # Add the size of the record header of 7300
-    dummy_frame.size += 4+4+4+2
+    dummy_frame.size += 4 + 4 + 4 + 2
     # Add the size of the checksum
-    dummy_frame.size += 4 
+    dummy_frame.size += 4
 
     dummy_frame.version = 1
     dummy_frame.record_type_id = 7300
     dummy_frame.system_enumerator = 0
     dummy_frame.flags = 0
-    dummy_frame.checksum = None 
-    dummy_frame.device_id = 7000 # System event id
+    dummy_frame.checksum = None
+    dummy_frame.device_id = 7000  # System event id
     file_catalog_data["frame"] = dummy_frame
     file_catalog_data["size"] = 14
     file_catalog_data["version"] = 1

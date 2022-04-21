@@ -30,7 +30,7 @@ from typing import (
     Sequence,
     Tuple,
     Union,
-    cast
+    cast,
 )
 
 import geopy
@@ -60,7 +60,7 @@ class CatalogIssueHandling(Enum):
     catalog with an initial linear read.
 
     The second is to handle corrupt file catalogs but warn the user
-    that the file catalog is corrupt. 
+    that the file catalog is corrupt.
 
     The third is to raise if the file catalog is missing or corrupt
 
@@ -98,18 +98,15 @@ class S7KReader(metaclass=ABCMeta):
                 raise _datarecord.CorruptFileCatalog
             filecatalog = cast(
                 records.FileCatalog,
-                self._read_record(7300, self.file_header.catalog_offset,
-                                  self.file_header.catalog_size),
+                self._read_record(
+                    7300, self.file_header.catalog_offset, self.file_header.catalog_size
+                ),
             )
         except _datarecord.CorruptFileCatalog as exc:
-            if self._catalog_issue_handling == CatalogIssueHandling.RAISE:
+            if self.catalog_issue_handling == CatalogIssueHandling.RAISE:
                 raise exc
-            elif (
-                self._catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN
-            ):
-                logger.warning(
-                    "File catalog was corrupt but a new one was generated."
-                )
+            elif self.catalog_issue_handling == CatalogIssueHandling.HANDLE_BUT_WARN:
+                logger.warning("File catalog was corrupt but a new one was generated.")
             filecatalog = self._build_file_catalog()
         except Exception as exc:
             raise exc
@@ -220,7 +217,9 @@ class S7KReader(metaclass=ABCMeta):
         backward_records.extend(forward_records)
         return backward_records
 
-    def _read_record(self, record_type: int, offset: int, size: int) -> records.BaseRecord:
+    def _read_record(
+        self, record_type: int, offset: int, size: int
+    ) -> records.BaseRecord:
         """Read a record of record_type at the given offset"""
         bytes_wrapper = BytesIO(self._get_stream_for_read(offset).read(size))
         return _datarecord.record(record_type).read(bytes_wrapper)
@@ -242,8 +241,11 @@ class S7KReader(metaclass=ABCMeta):
         except (AttributeError, KeyError) as ex:
             offsets = [
                 (offset, size)
-                for offset, rt, size in zip(self.file_catalog.offsets,
-                    self.file_catalog.record_types, self.file_catalog.sizes)
+                for offset, rt, size in zip(
+                    self.file_catalog.offsets,
+                    self.file_catalog.record_types,
+                    self.file_catalog.sizes,
+                )
                 if rt == record_type
             ]
 
@@ -268,7 +270,11 @@ class S7KFileReader(S7KReader):
         file: Union[str, bytes, os.PathLike, BinaryIO],
         catalog_issue_handling: CatalogIssueHandling = CatalogIssueHandling.RAISE,
     ):
-        if isinstance(file, str) or isinstance(file, bytes) or isinstance(file, os.PathLike):
+        if (
+            isinstance(file, str)
+            or isinstance(file, bytes)
+            or isinstance(file, os.PathLike)
+        ):
             self._fhandle = open(file, "rb", 0)
         else:
             self._fhandle = file
@@ -301,7 +307,6 @@ class S7KFileReader(S7KReader):
     def catalog_issue_handling(self) -> CatalogIssueHandling:
         """Return the catalog issue handling property."""
         return self._catalog_issue_handling
-
 
 
 class Ping:
@@ -338,6 +343,11 @@ class Ping:
     def configuration(self) -> records.Configuration:
         """Return the 7001 record, which is shared for all pings in a file"""
         return self._reader.configuration
+
+    @property
+    def remote_control_sonar_settings(self) -> records.RemoteControlSonarSettings:
+        """Return the 7503 record, which is shared for all pings in a file"""
+        return cast(records.RemoteControlSonarSettings, self._read_record(7503))
 
     @cached_property
     def position_set(self) -> List[records.Position]:
@@ -443,7 +453,14 @@ class Ping:
         Clears all memory-heavy properties.
         Retains offsets for easy reloading.
         """
-        for key in "beamformed", "tvg", "beam_geometry", "raw_iq", "snippets", "raw_detections":
+        for key in (
+            "beamformed",
+            "tvg",
+            "beam_geometry",
+            "raw_iq",
+            "snippets",
+            "raw_detections",
+        ):
             if key in self.__dict__:
                 del self.__dict__[key]
 

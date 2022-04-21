@@ -1,5 +1,6 @@
 # Python cache files:
 __pycache__
+.pytest_cache/
 .vscode
 .py[oc]
 poetry.lock
@@ -34,3 +35,12 @@ events.out.tfevents.*
 
 # Coverage
 .coverage
+
+# Sphinx docs
+docs/build
+
+# data
+data/
+
+# dist
+dist/
