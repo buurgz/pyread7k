@@ -40,7 +40,7 @@ def getdata(obj, output, overwrite=False):
 
 @main.command()
 def devsetup():
-    """Instatiate the """
+    """Instatiate the"""
     root = pathlib.Path(__file__).parent.parent
 
     if len(list(root.glob(".env"))) == 0:

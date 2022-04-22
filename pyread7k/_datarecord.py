@@ -38,7 +38,7 @@ def _bytes_to_str(dict, keys):
 
 
 def _datablock_elemd(*items):
-    """ Maps the elemD function on arguments before passing to DataBlock """
+    """Maps the elemD function on arguments before passing to DataBlock"""
     return DataBlock(tuple(elemD_(*elems) for elems in items))
 
 
@@ -221,7 +221,7 @@ class _DataRecord7000(DataRecord):
 
 
 class _DataRecord7001(DataRecord):
-    """ Configuration """
+    """Configuration"""
 
     _record_type_id = 7001
 
@@ -390,7 +390,7 @@ class _DataRecord7004(DataRecord):
 
 
 class _DataRecord7010(DataRecord):
-    """ TVG Values """
+    """TVG Values"""
 
     _record_type_id = 7010
     _block_rth = DataBlock(
@@ -415,7 +415,7 @@ class _DataRecord7010(DataRecord):
 
 
 class _DataRecord7018(DataRecord):
-    """ Beamformed data """
+    """Beamformed data"""
 
     _record_type_id = 7018
     _block_rth = DataBlock(
@@ -453,7 +453,7 @@ class _DataRecord7018(DataRecord):
 
 
 class _DataRecord7027(DataRecord):
-    """ Raw Detection data """
+    """Raw Detection data"""
 
     _record_type_id = 7027
     _block_rth = _datablock_elemd(
@@ -498,7 +498,7 @@ class _DataRecord7027(DataRecord):
 
 
 class _DataRecord7028(DataRecord):
-    """ Snippet data """
+    """Snippet data"""
 
     _record_type_id = 7028
     _block_rth = DataBlock(
@@ -549,7 +549,7 @@ class _DataRecord7028(DataRecord):
 
 
 class _DataRecord7038(DataRecord):
-    """ IQ data """
+    """IQ data"""
 
     _record_type_id = 7038
     _block_rth = DataBlock(
@@ -690,7 +690,7 @@ class _DataRecord1012(DataRecord):
 
 
 class _DataRecord1008(DataRecord):
-    """ Depth """
+    """Depth"""
 
     _record_type_id = 1008
     _block_rth = DataBlock(
@@ -725,7 +725,7 @@ class _DataRecord1013(DataRecord):
 
 
 class _DataRecord1017(DataRecord):
-    """ PanTiltRoll """
+    """PanTiltRoll"""
 
     _record_type_id = 1017
     _block_rth = _datablock_elemd(
@@ -745,7 +745,7 @@ class _DataRecord1017(DataRecord):
 
 
 class _DataRecord1018(DataRecord):
-    """ Velocity """
+    """Velocity"""
 
     _record_type_id = 1018
     _block_rth = DataBlock(
@@ -764,7 +764,7 @@ class _DataRecord1018(DataRecord):
 
 
 class _DataRecord7022(DataRecord):
-    """ Sonar Source Version """
+    """Sonar Source Version"""
 
     _record_type_id = 7022
     _block_rth = DataBlock((elemD_("sonar_source_version", elemT.c8, 32),))
@@ -778,7 +778,7 @@ class _DataRecord7022(DataRecord):
 
 
 class _UnsupportedRecord(DataRecord):
-    """ Unsupported """
+    """Unsupported"""
 
     def _read(
         self, source: io.RawIOBase, drf: records.DataRecordFrame, start_offset: int
@@ -888,5 +888,5 @@ class _DataRecord7503(DataRecord):
 
 
 def record(type_id: int) -> DataRecord:
-    """Get a s7k record reader by record id """
+    """Get a s7k record reader by record id"""
     return DataRecord.instance(type_id)

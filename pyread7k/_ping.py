@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 class PingType(Enum):
-    """ Kinds of pings based on what data they have available """
+    """Kinds of pings based on what data they have available"""
 
     BEAMFORMED = 1
     IQ = 2
@@ -259,7 +259,7 @@ class S7KReader(metaclass=ABCMeta):
 
     @abstractmethod
     def _build_file_catalog(self) -> records.FileCatalog:
-        """ Build the file catalog. """
+        """Build the file catalog."""
 
 
 class S7KFileReader(S7KReader):
@@ -290,13 +290,13 @@ class S7KFileReader(S7KReader):
         return build_file_catalog(self._fhandle)
 
     def __getstate__(self) -> Dict[str, Any]:
-        """ Remove unpicklable file handle from dict before pickling. """
+        """Remove unpicklable file handle from dict before pickling."""
         state = self.__dict__.copy()
         del state["_fhandle"]
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
-        """ Open new file handle after unpickling. """
+        """Open new file handle after unpickling."""
         self.__dict__.update(state)
         self._fhandle = open(self._filename, "rb", buffering=0)
 
@@ -351,47 +351,47 @@ class Ping:
 
     @cached_property
     def position_set(self) -> List[records.Position]:
-        """ Returns all 1003 records timestamped within this ping. """
+        """Returns all 1003 records timestamped within this ping."""
         return cast(List[records.Position], self._read_records(1003))
 
     @cached_property
     def depth_set(self) -> List[records.Depth]:
-        """ Returns all 1008 records timestamped within this ping. """
+        """Returns all 1008 records timestamped within this ping."""
         return cast(List[records.Depth], self._read_records(1008))
 
     @cached_property
     def roll_pitch_heave_set(self) -> List[records.RollPitchHeave]:
-        """ Returns all 1012 records timestamped within this ping. """
+        """Returns all 1012 records timestamped within this ping."""
         return cast(List[records.RollPitchHeave], self._read_records(1012))
 
     @cached_property
     def heading_set(self) -> List[records.Heading]:
-        """ Returns all 1013 records timestamped within this ping. """
+        """Returns all 1013 records timestamped within this ping."""
         return cast(List[records.Heading], self._read_records(1013))
 
     @cached_property
     def pan_tilt_roll_set(self) -> List[records.PanTiltRoll]:
-        """ Returns all 1017 records timestamped within this ping. """
+        """Returns all 1017 records timestamped within this ping."""
         return cast(List[records.PanTiltRoll], self._read_records(1017))
 
     @cached_property
     def velocity_set(self) -> List[records.Velocity]:
-        """ Returns all 1018 records timestamped within this ping. """
+        """Returns all 1018 records timestamped within this ping."""
         return cast(List[records.Velocity], self._read_records(1018))
 
     @cached_property
     def beam_geometry(self) -> Optional[records.BeamGeometry]:
-        """ Returns 7004 record """
+        """Returns 7004 record"""
         return cast(Optional[records.BeamGeometry], self._read_record(7004))
 
     @cached_property
     def tvg(self) -> Optional[records.TVG]:
-        """ Returns 7010 record """
+        """Returns 7010 record"""
         return cast(Optional[records.TVG], self._read_record(7010))
 
     @cached_property
     def has_beamformed(self) -> bool:
-        """ Checks if the ping has 7018 data without reading it. """
+        """Checks if the ping has 7018 data without reading it."""
         return (
             self._reader.get_first_offset(7018, self._offset, self._next_offset)
             is not None
@@ -399,22 +399,22 @@ class Ping:
 
     @cached_property
     def beamformed(self) -> Optional[records.Beamformed]:
-        """ Returns 7018 record """
+        """Returns 7018 record"""
         return cast(Optional[records.Beamformed], self._read_record(7018))
 
     @cached_property
     def raw_detections(self) -> Optional[records.RawDetectionData]:
-        """ Returns 7027 record """
+        """Returns 7027 record"""
         return cast(Optional[records.RawDetectionData], self._read_record(7027))
 
     @cached_property
     def snippets(self) -> Optional[records.SnippetData]:
-        """ Returns 7028 record """
+        """Returns 7028 record"""
         return cast(Optional[records.SnippetData], self._read_record(7028))
 
     @cached_property
     def has_raw_iq(self) -> bool:
-        """ Checks if the ping has 7038 data without reading it. """
+        """Checks if the ping has 7038 data without reading it."""
         return (
             self._reader.get_first_offset(7038, self._offset, self._next_offset)
             is not None
@@ -422,7 +422,7 @@ class Ping:
 
     @cached_property
     def raw_iq(self) -> Optional[records.RawIQ]:
-        """ Returns 7038 record """
+        """Returns 7038 record"""
         return cast(Optional[records.RawIQ], self._read_record(7038))
 
     @cached_property
@@ -434,7 +434,7 @@ class Ping:
     def receiver_motion_for_sample(
         self, sample: int
     ) -> Tuple[records.RollPitchHeave, records.Heading]:
-        """ Find the most appropriate motion data for a sample based on time """
+        """Find the most appropriate motion data for a sample based on time"""
         time = self.sonar_settings.frame.time + timedelta(
             seconds=sample / self.sonar_settings.sample_rate
         )

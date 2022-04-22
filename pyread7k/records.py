@@ -84,32 +84,32 @@ class Position(BaseRecord):
 
     @property
     def latitude(self):
-        """ Latitude is only available for position type 0 """
+        """Latitude is only available for position type 0"""
         if self.position_type == 0:
             return self.latitude_northing
 
     @property
     def longitude(self):
-        """ Longitude is only available for position type 0 """
+        """Longitude is only available for position type 0"""
         if self.position_type == 0:
             return self.longitude_easting
 
     @property
     def northing(self):
-        """ Northing is only available for position type 1 """
+        """Northing is only available for position type 1"""
         if self.position_type == 1:
             return self.latitude_northing
 
     @property
     def easting(self):
-        """ Easting is only available for position type 1 """
+        """Easting is only available for position type 1"""
         if self.position_type == 1:
             return self.longitude_easting
 
 
 @dataclass
 class Depth(BaseRecord):
-    """ Record 1008 Water depth """
+    """Record 1008 Water depth"""
 
     record_type: int = field(default=1008, init=False)
 
@@ -134,7 +134,7 @@ class RollPitchHeave(BaseRecord):
 
 @dataclass
 class Heading(BaseRecord):
-    """ Record 1013 """
+    """Record 1013"""
 
     record_type: int = field(default=1013, init=False)
 
@@ -160,7 +160,7 @@ class PanTiltRoll(BaseRecord):
 
 @dataclass
 class Velocity(BaseRecord):
-    """ Record 1018 Velocity over the ground. All values in meters per second. """
+    """Record 1018 Velocity over the ground. All values in meters per second."""
 
     record_type: int = field(default=1018, init=False)
 
@@ -221,7 +221,7 @@ class SonarSettings(BaseRecord):
 
 @dataclass
 class DeviceConfiguration:
-    """ Configuration of a single device in a 7001 record """
+    """Configuration of a single device in a 7001 record"""
 
     identifier: int
     description: str
@@ -233,7 +233,7 @@ class DeviceConfiguration:
 
 @dataclass
 class Configuration(BaseRecord):
-    """ Record 7001 """
+    """Record 7001"""
 
     record_type: int = field(default=7001, init=False)
 
@@ -244,7 +244,7 @@ class Configuration(BaseRecord):
 
 @dataclass
 class BeamGeometry(BaseRecord):
-    """ Record 7004 """
+    """Record 7004"""
 
     record_type: int = field(default=7004, init=False)
 
@@ -259,7 +259,7 @@ class BeamGeometry(BaseRecord):
 
 @dataclass
 class TVG(BaseRecord):
-    """ Record 7010 """
+    """Record 7010"""
 
     record_type: int = field(default=7010, init=False)
 
@@ -302,7 +302,7 @@ class SonarSourceVersion(BaseRecord):
 
 
 class DetectionAlgorithm(Enum):
-    """ Algorithm for 7027 detection data """
+    """Algorithm for 7027 detection data"""
 
     G1_SIMPLE = 0
     G1_BLENDFILT = 1
@@ -315,7 +315,7 @@ class DetectionAlgorithm(Enum):
 
 
 class UncertaintyMethod(Enum):
-    """ Method used for 7027 detection """
+    """Method used for 7027 detection"""
 
     NOT_CALCULATED = 0
     ROB_HARE = 1
@@ -348,7 +348,7 @@ class DetectionFlags:
 
 @dataclass
 class DetectionQuality:
-    """ Parameters for the quality of a 7027 detection """
+    """Parameters for the quality of a 7027 detection"""
 
     brightness_filter_passed: bool
     collinearity_filter_passed: bool
@@ -379,22 +379,22 @@ class RawDetectionData(BaseRecord):
 
     @property
     def uncertainty_method(self) -> UncertaintyMethod:
-        """ Parse flags to get uncertainty method """
+        """Parse flags to get uncertainty method"""
         return UncertaintyMethod(self._flags & 0b1111)  # Extract lower 4 bits
 
     @property
     def multi_detection_enabled(self) -> bool:
-        """ Multi detection extracted from flags field """
+        """Multi detection extracted from flags field"""
         return bool(self._flags & (0b1 << 4))
 
     @property
     def has_snippets_detection_point(self) -> bool:
-        """ snippet detecion flag extracted from flags field """
+        """snippet detecion flag extracted from flags field"""
         return bool(self._flags & (0b1 << 6))
 
     @property
     def has_clipping(self) -> bool:
-        """ Clipping flag extracted from flags field """
+        """Clipping flag extracted from flags field"""
         return bool(self._flags & (0b1 << 7))
 
     @staticmethod
@@ -424,7 +424,7 @@ class RawDetectionData(BaseRecord):
 
 
 class SnippetControlFlag(Enum):
-    """ Flag for 7028 Snippet data """
+    """Flag for 7028 Snippet data"""
 
     AUTOMATIC_SNIPPET_WINDOW_USED = 0
     QUALITY_FILTER_ENABLED = 1
@@ -479,7 +479,7 @@ class RawIQ(BaseRecord):
 
 @dataclass
 class FileHeader(BaseRecord):
-    """ Record 7200. First record of 7k data file. """
+    """Record 7200. First record of 7k data file."""
 
     record_type: int = field(default=7200, init=False)
 
@@ -528,7 +528,7 @@ class FileCatalog(BaseRecord):
 
 @dataclass
 class RemoteControlSonarSettings(BaseRecord):
-    """ Record 7503 """
+    """Record 7503"""
 
     record_type: int = field(default=7503, init=False)
 

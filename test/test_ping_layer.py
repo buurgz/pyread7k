@@ -24,10 +24,10 @@ from .conftest import bf_filepath, does_not_raise, filedataset
 
 
 def get_current_memory() -> float:
-    """ Prints current memory of active process """
+    """Prints current memory of active process"""
     pid = os.getpid()
     own_process = psutil.Process(pid)
-    return own_process.memory_info()[0] / (1024 ** 2)
+    return own_process.memory_info()[0] / (1024**2)
 
 
 def test_sonar_settings_time(filedataset):
