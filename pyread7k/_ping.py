@@ -12,6 +12,7 @@ Expected order of records for a ping:
 import bisect
 import logging
 import os
+from pickle import PicklingError
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -275,8 +276,10 @@ class S7KFileReader(S7KReader):
             or isinstance(file, bytes)
             or isinstance(file, os.PathLike)
         ):
+            self._filename = file
             self._fhandle = open(file, "rb", 0)
         else:
+            self._filename = None
             self._fhandle = file
             file.seek(0)
         self._catalog_issue_handling = catalog_issue_handling
@@ -291,6 +294,10 @@ class S7KFileReader(S7KReader):
 
     def __getstate__(self) -> Dict[str, Any]:
         """Remove unpicklable file handle from dict before pickling."""
+        if self._filename is None:
+            raise PicklingError(
+                "Dataset is only picklable if initialized with a filename."
+            )
         state = self.__dict__.copy()
         del state["_fhandle"]
         return state
