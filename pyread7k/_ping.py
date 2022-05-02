@@ -37,7 +37,7 @@ from typing import (
 import geopy
 import numpy as np
 
-from . import _datarecord, records
+from . import _datarecord, records, _datablock
 from ._utils import build_file_catalog, cached_property, window
 
 logger = logging.getLogger(__name__)
@@ -84,10 +84,13 @@ class S7KReader(metaclass=ABCMeta):
         """Return the catalog issue handling property."""
 
     @cached_property
-    def file_header(self) -> records.FileHeader:
+    def file_header(self) -> Optional[records.FileHeader]:
         """Return the file header record for this reader"""
         # This is the only record which cannot use self._read_record since we do not
         # know size in advance
+        drf_at_zero = _datablock.DRFBlock().read(self._get_stream_for_read(0))
+        if drf_at_zero.record_type_id != 7200:
+            return None
         file_header = _datarecord.record(7200).read(self._get_stream_for_read(0))
         return cast(records.FileHeader, file_header)
 
@@ -95,6 +98,9 @@ class S7KReader(metaclass=ABCMeta):
     def file_catalog(self) -> records.FileCatalog:
         """Return the file catalog record for this reader"""
         try:
+            if self.file_header is None:
+                filecatalog = self._build_file_catalog()
+                return filecatalog
             if self.file_header.catalog_offset == 0:
                 raise _datarecord.CorruptFileCatalog
             filecatalog = cast(
